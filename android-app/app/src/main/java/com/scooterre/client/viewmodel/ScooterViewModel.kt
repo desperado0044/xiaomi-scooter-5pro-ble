@@ -263,9 +263,53 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
             protocol = p
             _state.update { it.copy(screen = Screen.DASHBOARD, error = null) }
             refreshAll()
+            startAutoRefresh()
             return
         }
         throw lastError ?: ProtocolException("Connection failed")
+    }
+
+    private var autoRefreshJob: Job? = null
+
+    /** Keeps every displayed value live without the user having to tap "Aktualisieren" - runs
+     * quietly in the background (no busy spinner, no error banner on a transient failure) so it
+     * doesn't fight the manual refresh/set actions for the UI's attention. Individual requests
+     * are still safe to interleave with manual actions: SpecClient's own mutex (see its comment)
+     * serializes all of them regardless of which caller issued them.
+     *
+     * 10s between cycles, not continuous: a full pass over all ~50 properties (each its own
+     * request/response round trip, ~150-200ms measured) takes ~9s on its own already - too short
+     * a gap would mean it's running almost continuously, competing with UI interactions
+     * (switching tabs, tapping a switch) for the same serialized BLE request queue. Effective
+     * refresh cadence is therefore ~19s (9s active + 10s pause), not literally every 10s -
+     * batching multiple properties into one BLE request would be the real way to speed this up
+     * further, not attempted here. */
+    private fun startAutoRefresh() {
+        autoRefreshJob?.cancel()
+        autoRefreshJob = viewModelScope.launch {
+            while (true) {
+                delay(10_000L)
+                val spec = protocol?.requireSpecClient() ?: break
+                try {
+                    // Collected locally and applied in one state update at the end, instead of
+                    // one update per property - a background refresh should swap all values over
+                    // at once, not visibly re-build the screen property by property the way the
+                    // very first load after connecting does.
+                    val results = mutableMapOf<String, SpecReadResult>()
+                    for (property in SpecProperties.ALL) {
+                        results[property.name] = withContext(Dispatchers.IO) { spec.get(property) }
+                    }
+                    _state.update { it.copy(values = it.values + results) }
+                } catch (e: Exception) {
+                    android.util.Log.w("ScooterVM", "auto-refresh tick failed", e)
+                }
+            }
+        }
+    }
+
+    private fun stopAutoRefresh() {
+        autoRefreshJob?.cancel()
+        autoRefreshJob = null
     }
 
     /** Cleanly closes the BLE connection and returns to the login screen - lets the user end the
@@ -273,6 +317,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
      * to kill the app, which skips this cleanup and is what causes the next connect attempt to
      * need its automatic retry. */
     fun disconnect() {
+        stopAutoRefresh()
         protocol?.dispose()
         protocol = null
         _state.update { it.copy(screen = Screen.LOGIN, values = emptyMap(), error = null) }

@@ -36,15 +36,18 @@ import com.scooterre.client.protocol.SpecReadResult
 import com.scooterre.client.protocol.SpecType
 import com.scooterre.client.viewmodel.UiState
 
-private val GROUPS = listOf(1, 2, 3, 4, 6)
+/** Tabs are curated by topic, not by raw MIoT siid - see SpecProperties.TAB_* for why and the
+ * exact property lists. Settings only ever contains SpecProperties.SETTABLE, nothing read-only. */
+private val TABS: List<Pair<(AppStrings) -> String, List<String>>> = listOf(
+    { s: AppStrings -> s.tabRide } to SpecProperties.TAB_RIDE,
+    { s: AppStrings -> s.tabBattery } to SpecProperties.TAB_BATTERY,
+    { s: AppStrings -> s.tabSettings } to SpecProperties.TAB_SETTINGS,
+    { s: AppStrings -> s.tabVehicleStatus } to SpecProperties.TAB_VEHICLE_STATUS,
+    { s: AppStrings -> s.tabIdentification } to SpecProperties.TAB_IDENTIFICATION,
+    { s: AppStrings -> s.tabRideLog } to SpecProperties.TAB_RIDE_LOG,
+)
 
-private fun tabName(siid: Int, s: AppStrings): String = when (siid) {
-    1 -> s.tabRideBattery
-    2 -> s.tabSettings
-    3 -> s.tabBatteryDetail
-    4 -> s.tabIdentification
-    else -> s.tabRideLog
-}
+private val PROPERTIES_BY_NAME = SpecProperties.ALL.associateBy { it.name }
 
 /** Scale factor for numeric properties. Confirmed against the plugin's own UNITS table and
  * verified raw-byte captures from the real device (docs/RESEARCH_LOG.md) - several of these
@@ -128,21 +131,22 @@ fun DashboardScreen(
 
         var selectedTab by remember { mutableStateOf(0) }
         ScrollableTabRow(selectedTabIndex = selectedTab, edgePadding = 0.dp) {
-            GROUPS.forEachIndexed { index, siid ->
+            TABS.forEachIndexed { index, (nameFor, _) ->
                 Tab(
                     selected = selectedTab == index,
                     onClick = { selectedTab = index },
-                    text = { Text(tabName(siid, s)) },
+                    text = { Text(nameFor(s)) },
                 )
             }
         }
 
-        val activeSiid = GROUPS[selectedTab]
+        val activeNames = TABS[selectedTab].second
+        val activeProperties = activeNames.mapNotNull { PROPERTIES_BY_NAME[it] }
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier.padding(top = 12.dp, bottom = 16.dp),
         ) {
-            items(SpecProperties.ALL.filter { it.siid == activeSiid }, key = { it.name }) { property ->
+            items(activeProperties, key = { it.name }) { property ->
                 PropertyRow(property, state.values[property.name], state.language, onSetBool, onSetNumeric)
             }
         }
