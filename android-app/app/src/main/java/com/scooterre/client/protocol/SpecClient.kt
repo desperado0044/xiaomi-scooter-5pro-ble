@@ -177,6 +177,39 @@ object SpecProperties {
      * (see project research log) so the app can't exceed the local limit through it regardless.
      * The warning text itself is bilingual and lives in ui/Strings.kt ([com.scooterre.client.ui.regionWarning]). */
     val REGION_SENSITIVE_PROPERTIES = setOf("CRUISE_IS_ON", "TAIL_LIGHT_IS_ON")
+
+    /** UI grouping into tabs, curated by actual topic rather than by MIoT siid - the raw siid
+     * boundaries don't line up with what a user would expect (e.g. TIRE_MAINTENANCE shares siid=3
+     * with battery properties purely because of how the spec happens to be laid out, and the
+     * "Settings" siid=2 mixes real settings with read-only ride telemetry like AVERAGE_SPEED).
+     * Each property here belongs to exactly one tab; SETTINGS is deliberately exactly [SETTABLE]
+     * so that tab never mixes in read-only info. Order within each list is display order. */
+    // RIDING_MODE is deliberately only in TAB_SETTINGS, not duplicated here too, even though it's
+    // arguably ride telemetry - it's an editable control (cycle buttons), and showing the same
+    // control in two tabs would be confusing rather than helpful.
+    val TAB_RIDE = listOf(
+        "AVERAGE_SPEED", "TOTAL_MILEAGE", "IS_RIDING", "RIDING_TIME",
+        "HIGHEST_SPEED", "REMAINING_MILEAGE", "CURRENT_MILEAGE", "FAULT",
+    )
+    val TAB_BATTERY = listOf(
+        "BATTERY_LEVEL", "REMAINING_BATTERY", "VOLTAGE", "CURRENT", "POWER", "BATTERY_STATUS",
+        "BATTERY_TEMPERATURE", "IS_CHARGING", "NUMBER_OF_CYCLES", "SOH",
+        "REMAINING_MILEAGE_ALGORITHM", "MORE_BATTERY_INFO", "MORE_BATTERY_INFO_2",
+    )
+    val TAB_SETTINGS = listOf(
+        "RIDING_MODE", "IS_LOCKED", "CRUISE_IS_ON", "TAIL_LIGHT_IS_ON", "ENERGY_RECOVERY",
+        "ASR_IS_ON", "AUTO_LIGHT", "TCS", "INTELLIGENT_DOWNHILL", "HILL_PARKING",
+        "ATMOSPHERE_LIGHT", "BLUETOOTH_SEARCH_ON", "MILEAGE_UNIT",
+    )
+    val TAB_VEHICLE_STATUS = listOf(
+        "SCOOTER_TEMPERATURE", "LOCK_WARNING", "TIRE_MAINTENANCE", "FAKE_SHUTDOWN_STATUS",
+        "BLUETOOTH_CAR_SEARCH",
+    )
+    val TAB_IDENTIFICATION = listOf(
+        "PRODUCTION_DATE", "ACTIVATION_DATE", "SCOOTER_SN", "BATTERY_SN",
+        "FIRMWARE_VERSION", "BMS_FIRMWARE_VERSION",
+    )
+    val TAB_RIDE_LOG = listOf("LOG_1", "LOG_2", "LOG_3", "LOG_4", "LOG_5", "RIDING_RECORDS")
 }
 
 /**
