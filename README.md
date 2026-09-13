@@ -56,10 +56,24 @@ Fassung dieses Ausschlusses).
 
 - Cloud-Login direkt in der App (Passwort **oder** QR-Code — Letzteres auch für Konten ohne
   eigenes Mi-Passwort, z.B. bei Google/Apple-Anmeldung)
+- BLE-Scan zum Auffinden des eigenen Rollers, ohne die MAC-Adresse vorher zu kennen
 - Automatischer Bezug des BLE-Sicherheitsschlüssels (`ltmk`) über die Xiaomi-Cloud-API
-- Persistente BLE-Sitzung (keine Neuverbindung bei jeder Abfrage)
-- Alle bekannten MIoT-Properties les- und teilweise beschreibbar (Akku, Fahrt, Einstellungen,
-  Identifikation) in einer Compose-Oberfläche mit Tabs
+- Persistente BLE-Sitzung (keine Neuverbindung bei jeder Abfrage), mit automatischem
+  Wiederholungsversuch bei kurzzeitigen Verbindungsproblemen
+- Vollständige Oberfläche auf Deutsch und Englisch umschaltbar (merkt sich die Wahl)
+- Alle bekannten MIoT-Properties in fünf Tabs, mit korrekter Einheiten-/Skalierungsanzeige und
+  Klartext statt Rohwerten wo möglich:
+  - **Fahrt & Akku**: Fahrmodus (einstellbar), Akkustand, Spannung/Strom/Leistung, Restreichweite,
+    Fehlerstatus, Fahrstrecke
+  - **Einstellungen**: Sperre, Tempomat, Rücklicht, Rekuperationsstärke, ASR/TCS, Berg-Features,
+    Ambientelicht, Bluetooth-Suche u.a. (die meisten davon einstellbar, jeweils mit
+    Sicherheits-/Rechtshinweis bei regional heiklen Funktionen wie Tempomat und Rücklicht)
+  - **Akku-Detail**: Akkustatus, Temperaturen, Reifen-Wartungserinnerung, Ladezyklen, Akkugesundheit
+  - **Identifikation**: Seriennummern, Firmware-Versionen, Produktionsdatum, detaillierte
+    Akku-Kennwerte (abgegebene Energie, Kapazität, Tiefentladungen)
+  - **Fahrtenbuch**: die letzten aufgezeichneten Fahrten des Rollers (Dauer, Distanz,
+    Durchschnitts-/Höchstgeschwindigkeit pro Fahrt)
+- Ein "Trennen"-Button für einen sauberen Verbindungsabbau statt nur App-Beenden
 
 ## Lizenz
 

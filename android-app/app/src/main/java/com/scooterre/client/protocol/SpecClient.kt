@@ -93,11 +93,26 @@ object SpecProperties {
         SpecProperty(2, 15, "HILL_PARKING", SpecType.BOOL),
         SpecProperty(2, 16, "ATMOSPHERE_LIGHT", SpecType.UINT8),
         SpecProperty(2, 17, "BLUETOOTH_SEARCH_ON", SpecType.BOOL),
+        // Type unconfirmed (the reference plugin doesn't declare a wire type for this one
+        // either - it's absent from its own BOOL/ENUM/UNIT tables) - UINT8 is the safe default
+        // for an unknown small-integer status/selector; read-only, so a wrong guess here only
+        // risks a slightly-off displayed number, never a malformed SET.
+        SpecProperty(2, 11, "REMAINING_MILEAGE_ALGORITHM", SpecType.UINT8),
+        SpecProperty(2, 18, "FAKE_SHUTDOWN_STATUS", SpecType.BOOL),
         SpecProperty(3, 1, "BATTERY_STATUS", SpecType.UINT8),
         SpecProperty(3, 2, "BATTERY_TEMPERATURE", SpecType.INT8),
         SpecProperty(3, 3, "SCOOTER_TEMPERATURE", SpecType.INT8),
+        // Type unconfirmed, see REMAINING_MILEAGE_ALGORITHM above - same reasoning.
+        SpecProperty(3, 4, "LOCK_WARNING", SpecType.UINT8),
         SpecProperty(3, 5, "MILEAGE_UNIT", SpecType.UINT8),
+        // Packed decimal string "[state 1][interval 3][remaining-days 3]" - see
+        // ui/DashboardScreen.kt's formatTireMaintenance for the decode.
+        SpecProperty(3, 7, "TIRE_MAINTENANCE", SpecType.STRING),
         SpecProperty(3, 8, "ACTIVATION_DATE", SpecType.STRING),
+        // Confirmed to sometimes fail with a device-side error when read this way (see
+        // docs/RESEARCH_LOG.md) - harmless to include since a failed GET already surfaces as a
+        // normal "Fehler (status=...)" card like any other property read failure.
+        SpecProperty(3, 9, "RIDING_RECORDS", SpecType.STRING),
         SpecProperty(3, 10, "IS_CHARGING", SpecType.BOOL),
         SpecProperty(3, 11, "NUMBER_OF_CYCLES", SpecType.UINT8),
         SpecProperty(3, 12, "SOH", SpecType.UINT8),
@@ -106,6 +121,21 @@ object SpecProperties {
         SpecProperty(4, 3, "BMS_FIRMWARE_VERSION", SpecType.STRING),
         SpecProperty(4, 4, "SCOOTER_SN", SpecType.STRING),
         SpecProperty(4, 5, "FIRMWARE_VERSION", SpecType.STRING),
+        // Hex-encoded structured strings - see ui/DashboardScreen.kt's formatMoreBatteryInfo/2.
+        SpecProperty(4, 7, "MORE_BATTERY_INFO", SpecType.STRING),
+        SpecProperty(4, 8, "MORE_BATTERY_INFO_2", SpecType.STRING),
+        // Read-only here even though it's BOOL: not in the reference plugin's own WRITABLE list
+        // either (unverified as safe to SET, possibly a "find my scooter" beeper/light action).
+        SpecProperty(4, 10, "BLUETOOTH_CAR_SEARCH", SpecType.BOOL),
+        // Ride history log, 5 slots (each holds a handful of packed ride records) - see
+        // ui/DashboardScreen.kt's formatRideLog. (3,6) OOB_CODE (pairing secret) and (4,6)
+        // RESTORE_SCOOTER_SETTINGS (factory-reset action) are deliberately never exposed at all,
+        // matching the reference plugin's own SENSITIVE/DANGEROUS_EXCLUDED classification.
+        SpecProperty(6, 1, "LOG_1", SpecType.STRING),
+        SpecProperty(6, 2, "LOG_2", SpecType.STRING),
+        SpecProperty(6, 3, "LOG_3", SpecType.STRING),
+        SpecProperty(6, 4, "LOG_4", SpecType.STRING),
+        SpecProperty(6, 5, "LOG_5", SpecType.STRING),
     )
 
     /** Properties the device is documented to accept SET for. RIDING_MODE is included because

@@ -36,13 +36,14 @@ import com.scooterre.client.protocol.SpecReadResult
 import com.scooterre.client.protocol.SpecType
 import com.scooterre.client.viewmodel.UiState
 
-private val GROUPS = listOf(1, 2, 3, 4)
+private val GROUPS = listOf(1, 2, 3, 4, 6)
 
 private fun tabName(siid: Int, s: AppStrings): String = when (siid) {
     1 -> s.tabRideBattery
     2 -> s.tabSettings
     3 -> s.tabBatteryDetail
-    else -> s.tabIdentification
+    4 -> s.tabIdentification
+    else -> s.tabRideLog
 }
 
 /** Scale factor for numeric properties. Confirmed against the plugin's own UNITS table and
@@ -298,6 +299,10 @@ private fun displayValue(property: SpecProperty, result: SpecReadResult?, lang: 
     if ((property.name == "PRODUCTION_DATE" || property.name == "ACTIVATION_DATE") && v is String) {
         return formatDateString(v)
     }
+    if (property.name == "TIRE_MAINTENANCE" && v is String) return formatTireMaintenance(v, lang)
+    if (property.name == "MORE_BATTERY_INFO" && v is String) return formatMoreBatteryInfo(v, lang)
+    if (property.name == "MORE_BATTERY_INFO_2" && v is String) return formatMoreBatteryInfo2(v, lang)
+    if (property.siid == 6 && v is String) return formatRideLog(v, lang)
     if (hasEnumLabels(property.name)) {
         val key = v as? Long
         val label = key?.let { enumLabel(property.name, it, lang) }
