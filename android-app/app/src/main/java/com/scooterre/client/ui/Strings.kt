@@ -39,6 +39,8 @@ data class AppStrings(
     val tabSettings: String,
     val tabBatteryDetail: String,
     val tabIdentification: String,
+    val tabRideLog: String,
+    val noRidesYet: String,
     val regionWarningTitle: String,
     val regionWarningConfirmSuffix: String,
     val regionWarningConfirmButton: String,
@@ -98,6 +100,8 @@ val STRINGS_DE = AppStrings(
     tabSettings = "Einstellungen",
     tabBatteryDetail = "Akku-Detail",
     tabIdentification = "Identifikation",
+    tabRideLog = "Fahrtenbuch",
+    noRidesYet = "Noch keine aufgezeichneten Fahrten",
     regionWarningTitle = "Rechtlicher Hinweis",
     regionWarningConfirmSuffix = " Mit dem Aktivieren bestätigst du, dass du die Verantwortung dafür übernimmst.",
     regionWarningConfirmButton = "Ich bestätige, aktivieren",
@@ -156,6 +160,8 @@ val STRINGS_EN = AppStrings(
     tabSettings = "Settings",
     tabBatteryDetail = "Battery Detail",
     tabIdentification = "Identification",
+    tabRideLog = "Ride Log",
+    noRidesYet = "No recorded rides yet",
     regionWarningTitle = "Legal Notice",
     regionWarningConfirmSuffix = " By enabling this, you confirm that you take responsibility for it.",
     regionWarningConfirmButton = "I confirm, enable",
@@ -207,6 +213,12 @@ private val PROPERTY_NAMES_DE: Map<String, String> = mapOf(
     "PRODUCTION_DATE" to "Produktionsdatum", "BATTERY_SN" to "Akku-Seriennummer",
     "BMS_FIRMWARE_VERSION" to "BMS-Firmware-Version", "SCOOTER_SN" to "Roller-Seriennummer",
     "FIRMWARE_VERSION" to "Firmware-Version",
+    "REMAINING_MILEAGE_ALGORITHM" to "Reichweiten-Algorithmus", "FAKE_SHUTDOWN_STATUS" to "Ruhezustand",
+    "LOCK_WARNING" to "Schloss-Warnsignal", "TIRE_MAINTENANCE" to "Reifen-Wartungserinnerung",
+    "RIDING_RECORDS" to "Fahrtaufzeichnungen", "MORE_BATTERY_INFO" to "Akku-Detailwerte",
+    "MORE_BATTERY_INFO_2" to "Akku-Extremwerte", "BLUETOOTH_CAR_SEARCH" to "Roller-Suche (Signal)",
+    "LOG_1" to "Fahrtenbuch 1", "LOG_2" to "Fahrtenbuch 2", "LOG_3" to "Fahrtenbuch 3",
+    "LOG_4" to "Fahrtenbuch 4", "LOG_5" to "Fahrtenbuch 5",
 )
 
 private val PROPERTY_NAMES_EN: Map<String, String> = mapOf(
@@ -226,6 +238,12 @@ private val PROPERTY_NAMES_EN: Map<String, String> = mapOf(
     "PRODUCTION_DATE" to "Production Date", "BATTERY_SN" to "Battery Serial Number",
     "BMS_FIRMWARE_VERSION" to "BMS Firmware Version", "SCOOTER_SN" to "Scooter Serial Number",
     "FIRMWARE_VERSION" to "Firmware Version",
+    "REMAINING_MILEAGE_ALGORITHM" to "Range Algorithm", "FAKE_SHUTDOWN_STATUS" to "Sleep State",
+    "LOCK_WARNING" to "Lock Warning Signal", "TIRE_MAINTENANCE" to "Tire Maintenance Reminder",
+    "RIDING_RECORDS" to "Riding Records", "MORE_BATTERY_INFO" to "Battery Detail Values",
+    "MORE_BATTERY_INFO_2" to "Battery Extreme Values", "BLUETOOTH_CAR_SEARCH" to "Scooter Finder (Signal)",
+    "LOG_1" to "Ride Log 1", "LOG_2" to "Ride Log 2", "LOG_3" to "Ride Log 3",
+    "LOG_4" to "Ride Log 4", "LOG_5" to "Ride Log 5",
 )
 
 fun propertyName(name: String, lang: Lang): String =
@@ -316,3 +334,101 @@ private val REGION_WARNINGS_EN: Map<String, String> = mapOf(
 
 fun regionWarning(propertyName: String, lang: Lang): String? =
     (if (lang == Lang.DE) REGION_WARNINGS_DE else REGION_WARNINGS_EN)[propertyName]
+
+/** TIRE_MAINTENANCE (3.7) is a packed decimal string "[state:1][interval-days:3][remaining-days:3]"
+ * (e.g. "2030030") - decode logic ported from the reference plugin's _fmt_tire(), not guessed.
+ * state '2' means the reminder is off, anything else means it's on. */
+fun formatTireMaintenance(raw: String, lang: Lang): String {
+    val s = raw.trim()
+    if (s.length < 7 || !s.all { it.isDigit() }) return s.ifEmpty { strings(lang).emptyValuePlaceholder }
+    val on = s[0] != '2'
+    val interval = s.substring(1, 4).toInt()
+    val remaining = s.substring(4, 7).toInt()
+    return if (lang == Lang.DE) {
+        val state = if (on) "an" else "aus"
+        "Erinnerung $state, Intervall $interval Tage, Rest $remaining Tage"
+    } else {
+        val state = if (on) "on" else "off"
+        "Reminder $state, interval $interval days, $remaining days left"
+    }
+}
+
+/** MORE_BATTERY_INFO (4.7) is a hex-encoded string: 6 hex chars energy delivered (Wh, /1000 for
+ * kWh), 4 hex chars total capacity (Ah), 4 hex chars deep-discharge count. Ported from the
+ * reference plugin's _fmt_more_battery() - this is also what confirmed REMAINING_BATTERY's unit
+ * is mAh (see docs/RESEARCH_LOG.md), not guessed. */
+fun formatMoreBatteryInfo(raw: String, lang: Lang): String {
+    val s = raw.trim().lowercase()
+    if (s.length < 14 || !s.all { it in "0123456789abcdef" }) return s.ifEmpty { strings(lang).emptyValuePlaceholder }
+    return try {
+        val energyKwh = s.substring(0, 6).toLong(16) / 1000.0
+        val capacityAh = s.substring(6, 10).toLong(16)
+        val deepDischarges = s.substring(10, 14).toLong(16)
+        val energyText = "%.2f".format(if (lang == Lang.DE) java.util.Locale.GERMANY else java.util.Locale.US, energyKwh)
+        if (lang == Lang.DE) "Abgegeben $energyText kWh, Kapazität $capacityAh Ah, Tiefentladungen $deepDischarges"
+        else "Delivered $energyText kWh, capacity $capacityAh Ah, deep discharges $deepDischarges"
+    } catch (e: NumberFormatException) {
+        s
+    }
+}
+
+/** MORE_BATTERY_INFO_2 (4.8) is a hex-encoded string: date/time of the last extreme-temperature
+ * event (2 hex chars each for year/month/day/hour/minute/second) plus a 4 hex char charge-time
+ * counter in seconds. Ported from the reference plugin's _fmt_more_battery2(). */
+fun formatMoreBatteryInfo2(raw: String, lang: Lang): String {
+    val s = raw.trim().lowercase()
+    if (s.length < 16 || !s.all { it in "0123456789abcdef" }) return s.ifEmpty { strings(lang).emptyValuePlaceholder }
+    return try {
+        val y = s.substring(0, 2).toInt(16)
+        val mo = s.substring(2, 4).toInt(16)
+        val d = s.substring(4, 6).toInt(16)
+        val h = s.substring(6, 8).toInt(16)
+        val mi = s.substring(8, 10).toInt(16)
+        val se = s.substring(10, 12).toInt(16)
+        val charge = s.substring(12, 16).toLong(16)
+        if (y == 0 && mo == 0 && d == 0) {
+            if (lang == Lang.DE) "Extremtemperatur: keine Daten, Ladezeit ${charge}s"
+            else "Extreme temp: no data, charge time ${charge}s"
+        } else {
+            val date = "%04d-%02d-%02d %02d:%02d:%02d".format(y, mo, d, h, mi, se)
+            if (lang == Lang.DE) "Extremtemperatur: $date, Ladezeit ${charge}s"
+            else "Extreme temp: $date, charge time ${charge}s"
+        }
+    } catch (e: NumberFormatException) {
+        s
+    }
+}
+
+/** One ride-history slot (LOG_1..LOG_5, siid=6) is a concatenation of 16-digit decimal records
+ * "[duration*10 min:4][distance*10 km:4][avg-speed*10 kmh:4][top-speed*10 kmh:4]", all-zero
+ * records are empty slots. Ported from the reference plugin's ride_records()/_fmt_ride_record(). */
+fun formatRideLog(raw: String, lang: Lang): String {
+    val s = raw.trim()
+    val records = mutableListOf<String>()
+    var i = 0
+    while (i + 16 <= s.length) {
+        val chunk = s.substring(i, i + 16)
+        i += 16
+        if (!chunk.all { it.isDigit() }) continue
+        val durTenths = chunk.substring(0, 4).toIntOrNull() ?: continue
+        val distTenths = chunk.substring(4, 8).toIntOrNull() ?: continue
+        val avgTenths = chunk.substring(8, 12).toIntOrNull() ?: continue
+        val topTenths = chunk.substring(12, 16).toIntOrNull() ?: continue
+        if (durTenths == 0 && distTenths == 0 && avgTenths == 0 && topTenths == 0) continue
+        val durMin = durTenths / 10.0
+        val locale = if (lang == Lang.DE) java.util.Locale.GERMANY else java.util.Locale.US
+        val durText = if (durMin >= 60) {
+            val h = (durMin / 60).toInt()
+            val m = (durMin % 60).toInt()
+            if (lang == Lang.DE) "${h}h %02dm".format(m) else "${h}h %02dm".format(m)
+        } else {
+            if (lang == Lang.DE) "${durMin.toInt()} min" else "${durMin.toInt()} min"
+        }
+        val dist = "%.1f".format(locale, distTenths / 10.0)
+        val avg = "%.1f".format(locale, avgTenths / 10.0)
+        val top = "%.1f".format(locale, topTenths / 10.0)
+        records += if (lang == Lang.DE) "$durText, $dist km, ø $avg km/h, max $top km/h"
+        else "$durText, $dist km, avg $avg km/h, top $top km/h"
+    }
+    return if (records.isEmpty()) strings(lang).noRidesYet else records.joinToString("; ")
+}
