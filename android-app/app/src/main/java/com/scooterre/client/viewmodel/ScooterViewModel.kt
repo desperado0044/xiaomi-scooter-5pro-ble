@@ -21,6 +21,9 @@ import com.scooterre.client.protocol.SpecProperty
 import com.scooterre.client.protocol.SpecReadResult
 import com.scooterre.client.protocol.SpecType
 import com.scooterre.client.protocol.encodeValue
+import com.scooterre.client.ui.Lang
+import com.scooterre.client.ui.propertyName
+import com.scooterre.client.ui.strings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -35,11 +38,13 @@ import kotlinx.coroutines.withTimeoutOrNull
 // build meant for anyone's own scooter, not just the one it was originally developed against.
 const val DEFAULT_SCOOTER_MAC = ""
 private const val KEY_LAST_MAC = "last_mac"
+private const val KEY_LANG = "lang"
 
 enum class Screen { LOGIN, DASHBOARD }
 
 data class UiState(
     val screen: Screen = Screen.LOGIN,
+    val language: Lang = Lang.DE,
     val macAddress: String = DEFAULT_SCOOTER_MAC,
     // Preferably the name from the Xiaomi cloud account (finishCloudLogin), falling back to the
     // BLE-advertised name if picked from a scan, or null for a generic label in the dashboard.
@@ -77,12 +82,21 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     private var pendingDevice: CloudDeviceMatch? = null
 
     private val _state = MutableStateFlow(
-        UiState(macAddress = prefs.getString(KEY_LAST_MAC, DEFAULT_SCOOTER_MAC) ?: DEFAULT_SCOOTER_MAC)
+        UiState(
+            macAddress = prefs.getString(KEY_LAST_MAC, DEFAULT_SCOOTER_MAC) ?: DEFAULT_SCOOTER_MAC,
+            language = if (prefs.getString(KEY_LANG, "DE") == "EN") Lang.EN else Lang.DE,
+        )
     )
     val state: StateFlow<UiState> = _state
 
     init {
         _state.update { it.copy(hasSavedLtmk = secureStore.loadLtmk(it.macAddress) != null) }
+    }
+
+    fun toggleLanguage() {
+        val next = if (_state.value.language == Lang.DE) Lang.EN else Lang.DE
+        prefs.edit().putString(KEY_LANG, next.name).apply()
+        _state.update { it.copy(language = next) }
     }
 
     fun onMacChanged(mac: String) {
@@ -129,16 +143,18 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         _state.update { it.copy(deviceName = bleName) }
     }
 
+    private val s get() = strings(_state.value.language)
+
     /** Uses the previously saved `ltmk` for the current MAC - no cloud round-trip at all. */
-    fun connectWithSavedLtmk() = launchBusy("Verbinde mit Roller ...") {
+    fun connectWithSavedLtmk() = launchBusy(s.connectingSavedBusy) {
         val mac = _state.value.macAddress
-        val ltmk = secureStore.loadLtmk(mac) ?: throw CloudException("Kein gespeicherter Schlüssel für $mac")
+        val ltmk = secureStore.loadLtmk(mac) ?: throw CloudException(s.noSavedKeyError(mac))
         connectAndLogin(mac, ltmk)
     }
 
     /** Password-based cloud login - only works for accounts that have a separate Mi password set
      * (not accounts only linked via Google/Apple sign-in - use [startQrLogin] for those). */
-    fun connectWithCloudLogin(username: String, password: String) = launchBusy("Xiaomi-Cloud-Login ...") {
+    fun connectWithCloudLogin(username: String, password: String) = launchBusy(s.cloudLoginBusy) {
         val cloud = XiaomiCloudClient()
         withContext(Dispatchers.IO) { cloud.login(username, password) }
         finishCloudLogin(cloud)
@@ -149,7 +165,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     fun startQrLogin() {
         val cloud = XiaomiCloudClient()
         viewModelScope.launch {
-            _state.update { it.copy(busy = true, busyMessage = "QR-Code wird geladen ...", error = null) }
+            _state.update { it.copy(busy = true, busyMessage = s.qrLoadingBusy, error = null) }
             val start: QrLoginStart
             try {
                 start = withContext(Dispatchers.IO) { cloud.startQrLogin() }
@@ -171,13 +187,13 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     /** Shared tail of both login paths: find the scooter's `did` by BLE MAC, fetch+decrypt its
      * `ltmk` (asking for the device sharing PIN if needed), save it, then connect over BLE. */
     private suspend fun finishCloudLogin(cloud: XiaomiCloudClient) {
-        _state.update { it.copy(busy = true, busyMessage = "Suche Roller im Xiaomi-Konto ...") }
+        _state.update { it.copy(busy = true, busyMessage = s.searchingDeviceBusy) }
         val mac = _state.value.macAddress
         val found = withContext(Dispatchers.IO) { cloud.findDeviceByMac(mac) }
-            ?: throw CloudException("Kein Gerät mit MAC $mac im Xiaomi-Konto gefunden")
+            ?: throw CloudException(s.deviceNotFoundError(mac))
         if (found.name != null) _state.update { it.copy(deviceName = found.name) }
 
-        updateBusyMessage("Hole Schlüssel (ltmk) ...")
+        updateBusyMessage(s.fetchingKeyBusy)
         try {
             val ltmk = withContext(Dispatchers.IO) { cloud.fetchLtmk(found.did, found.country, _state.value.pin.ifBlank { null }) }
             secureStore.saveLtmk(mac, ltmk)
@@ -187,16 +203,16 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
             pendingCloud = cloud
             pendingDevice = found
             _state.update {
-                it.copy(busy = false, needsPin = true, error = "Für dieses Gerät ist eine Sharing-PIN gesetzt - bitte eingeben und erneut versuchen.")
+                it.copy(busy = false, needsPin = true, error = s.pinRequiredError)
             }
         }
     }
 
     /** Retries only the ltmk fetch + connect after the user entered a PIN, reusing the already
      * cloud-logged-in session from [finishCloudLogin] instead of logging in again. */
-    fun retryWithPin() = launchBusy("Hole Schlüssel (ltmk) ...") {
-        val cloud = pendingCloud ?: throw CloudException("Keine aktive Anmeldung - bitte erneut anmelden")
-        val device = pendingDevice ?: throw CloudException("Kein Gerät gemerkt - bitte erneut anmelden")
+    fun retryWithPin() = launchBusy(s.fetchingKeyBusy) {
+        val cloud = pendingCloud ?: throw CloudException(s.noActiveSessionError)
+        val device = pendingDevice ?: throw CloudException(s.noRememberedDeviceError)
         val mac = _state.value.macAddress
         val ltmk = withContext(Dispatchers.IO) { cloud.fetchLtmk(device.did, device.country, _state.value.pin.ifBlank { null }) }
         secureStore.saveLtmk(mac, ltmk)
@@ -225,10 +241,10 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         var lastError: Exception? = null
         for (attempt in 1..3) {
             if (attempt > 1) {
-                updateBusyMessage("Versuch $attempt von 3 ...")
+                updateBusyMessage(s.retryingBusy(attempt))
                 delay(1500L * (attempt - 1))
             } else {
-                updateBusyMessage("Verbinde per Bluetooth ...")
+                updateBusyMessage(s.connectingBluetoothBusy)
             }
             val p = try {
                 MiProtocol.connect(getApplication(), device)
@@ -237,7 +253,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
                 continue
             }
             try {
-                updateBusyMessage("Authentifiziere ...")
+                updateBusyMessage(s.authenticatingBusy)
                 p.login(ltmk)
             } catch (e: Exception) {
                 p.dispose()
@@ -249,7 +265,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
             refreshAll()
             return
         }
-        throw lastError ?: ProtocolException("Verbindung fehlgeschlagen")
+        throw lastError ?: ProtocolException("Connection failed")
     }
 
     /** Cleanly closes the BLE connection and returns to the login screen - lets the user end the
@@ -267,7 +283,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         _state.update { it.copy(hasSavedLtmk = false) }
     }
 
-    fun refreshAll() = launchBusy("Lese Werte ...") {
+    fun refreshAll() = launchBusy(s.readingValuesBusy) {
         val spec = protocol?.requireSpecClient() ?: return@launchBusy
         for (property in SpecProperties.ALL) {
             val result = withContext(Dispatchers.IO) { spec.get(property) }
@@ -283,14 +299,20 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
 
     fun setBoolProperty(property: SpecProperty, value: Boolean) = launchBusy(null) {
         val spec = protocol?.requireSpecClient() ?: return@launchBusy
-        withContext(Dispatchers.IO) { spec.set(property, encodeValue(SpecType.BOOL, if (value) 1L else 0L)) }
+        val status = withContext(Dispatchers.IO) { spec.set(property, encodeValue(SpecType.BOOL, if (value) 1L else 0L)) }
         refreshOneNow(spec, property)
+        // The scooter can silently reject a SET (wrong precondition, unsupported in this state,
+        // etc.) - without checking this, a failed write looked indistinguishable from the switch
+        // just not reacting to the tap, with no indication anything went wrong (see IS_LOCKED
+        // incident: a rejected/failed unlock read back as "still locked" with zero feedback).
+        if (status != 0) throw ProtocolException(s.setRejectedError(propertyName(property.name, _state.value.language), status))
     }
 
     fun setNumericProperty(property: SpecProperty, value: Long) = launchBusy(null) {
         val spec = protocol?.requireSpecClient() ?: return@launchBusy
-        withContext(Dispatchers.IO) { spec.set(property, encodeValue(property.type, value)) }
+        val status = withContext(Dispatchers.IO) { spec.set(property, encodeValue(property.type, value)) }
         refreshOneNow(spec, property)
+        if (status != 0) throw ProtocolException(s.setRejectedError(propertyName(property.name, _state.value.language), status))
     }
 
     private suspend fun refreshOneNow(spec: SpecClient, property: SpecProperty) {
