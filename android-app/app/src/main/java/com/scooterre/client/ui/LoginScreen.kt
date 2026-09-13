@@ -51,18 +51,27 @@ fun LoginScreen(
     onStartQrLogin: () -> Unit,
     onRetryWithPin: () -> Unit,
     onForgetSaved: () -> Unit,
+    onToggleLanguage: () -> Unit,
 ) {
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     val context = LocalContext.current
+    val s = strings(state.language)
 
     Column(
         modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(24.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("Scooter 5 Pro", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Scooter 5 Pro", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
+            TextButton(onClick = onToggleLanguage) { Text(if (state.language == Lang.DE) "🇩🇪" else "🇬🇧") }
+        }
         Text(
-            "Eigenes Xiaomi-Konto - PIN und Passwort werden nie im Code gespeichert, nur verschlüsselt auf diesem Gerät (Android Keystore).",
+            s.loginSubtitle,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -71,8 +80,8 @@ fun LoginScreen(
             OutlinedTextField(
                 value = state.macAddress,
                 onValueChange = onMacChanged,
-                label = { Text("Roller BLE-MAC") },
-                placeholder = { Text("z.B. per Scan finden") },
+                label = { Text(s.macFieldLabel) },
+                placeholder = { Text(s.macFieldPlaceholder) },
                 modifier = Modifier.weight(1f),
                 enabled = !state.busy,
                 singleLine = true,
@@ -80,7 +89,7 @@ fun LoginScreen(
             if (state.scanning) {
                 CircularProgressIndicator(modifier = Modifier.size(32.dp))
             } else {
-                TextButton(onClick = onStartScan, enabled = !state.busy) { Text("Scannen") }
+                TextButton(onClick = onStartScan, enabled = !state.busy) { Text(s.scanButton) }
             }
         }
 
@@ -88,7 +97,7 @@ fun LoginScreen(
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 if (state.scanning) {
                     Text(
-                        "Suche nach Geräten in der Nähe ...",
+                        s.scanningStatus,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -112,22 +121,22 @@ fun LoginScreen(
 
         if (state.hasSavedLtmk) {
             HorizontalDivider()
-            Text("Für diese MAC ist bereits ein Schlüssel gespeichert.")
+            Text(s.savedKeyText)
             Button(onClick = onConnectSaved, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
-                Text("Verbinden (gespeicherter Schlüssel)")
+                Text(s.connectSavedButton)
             }
             TextButton(onClick = onForgetSaved, enabled = !state.busy) {
-                Text("Gespeicherten Schlüssel löschen")
+                Text(s.forgetSavedButton)
             }
         }
 
         HorizontalDivider()
-        Text("Neu anmelden / anderes Konto:")
+        Text(s.newLoginDivider)
 
         OutlinedTextField(
             value = state.pin,
             onValueChange = onPinChanged,
-            label = { Text("Geräte-PIN (nur falls in Mi Home eine Sharing-PIN gesetzt ist)") },
+            label = { Text(s.pinFieldLabel) },
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
             modifier = Modifier.fillMaxWidth(),
@@ -139,11 +148,11 @@ fun LoginScreen(
                 BitmapFactory.decodeByteArray(state.qrPng, 0, state.qrPng.size).asImageBitmap()
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                Text("Mit der App scannen, die mit dem Roller verbunden ist (z.B. Xiaomi Home):")
-                Image(bitmap = bitmap, contentDescription = "QR-Login-Code", modifier = Modifier.size(220.dp))
+                Text(s.qrScanInstruction)
+                Image(bitmap = bitmap, contentDescription = s.qrImageContentDescription, modifier = Modifier.size(220.dp))
                 if (state.qrWaiting) {
                     CircularProgressIndicator(modifier = Modifier.padding(top = 8.dp))
-                    Text("Warte auf Bestätigung ...")
+                    Text(s.qrWaitingText)
                 }
                 state.qrLoginUrl?.let { url ->
                     TextButton(onClick = {
@@ -151,29 +160,29 @@ fun LoginScreen(
                         // scooter's account session - a plain ACTION_VIEW can silently land in a
                         // different installed Xiaomi/Mi app that isn't logged into that account.
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                        context.startActivity(Intent.createChooser(intent, "Öffnen mit ..."))
-                    }) { Text("Stattdessen mit App/Browser öffnen (Auswahl)") }
+                        context.startActivity(Intent.createChooser(intent, s.qrOpenChooserTitle))
+                    }) { Text(s.qrOpenButton) }
                 }
             }
         } else {
             Button(onClick = onStartQrLogin, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
-                Text("QR-Code-Login (auch ohne Mi-Passwort, z.B. bei Google-Konto)")
+                Text(s.qrLoginButton)
             }
 
             HorizontalDivider()
-            Text("Alternativ mit Mi-Account-Passwort (falls gesetzt):", style = MaterialTheme.typography.bodySmall)
+            Text(s.passwordAltDivider, style = MaterialTheme.typography.bodySmall)
 
             OutlinedTextField(
                 value = username,
                 onValueChange = { username = it },
-                label = { Text("Xiaomi-Konto (E-Mail/Telefon)") },
+                label = { Text(s.usernameFieldLabel) },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !state.busy,
             )
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
-                label = { Text("Mi-Account-Passwort") },
+                label = { Text(s.passwordFieldLabel) },
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 modifier = Modifier.fillMaxWidth(),
@@ -184,13 +193,13 @@ fun LoginScreen(
                 enabled = !state.busy && username.isNotBlank() && password.isNotBlank(),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Mit Passwort anmelden")
+                Text(s.passwordLoginButton)
             }
         }
 
         if (state.needsPin) {
             Button(onClick = onRetryWithPin, enabled = !state.busy && state.pin.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
-                Text("Mit PIN erneut versuchen")
+                Text(s.retryPinButton)
             }
         }
 
@@ -202,7 +211,7 @@ fun LoginScreen(
         }
 
         state.error?.let {
-            Text("Fehler: $it", color = MaterialTheme.colorScheme.error)
+            Text("${s.errorPrefix}$it", color = MaterialTheme.colorScheme.error)
         }
     }
 }

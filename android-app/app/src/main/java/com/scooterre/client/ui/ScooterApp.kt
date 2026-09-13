@@ -29,11 +29,13 @@ fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
                     onStartQrLogin = viewModel::startQrLogin,
                     onRetryWithPin = viewModel::retryWithPin,
                     onForgetSaved = viewModel::forgetSavedLtmk,
+                    onToggleLanguage = viewModel::toggleLanguage,
                 )
                 Screen.DASHBOARD -> DashboardScreen(
                     state = state,
                     onRefreshAll = viewModel::refreshAll,
                     onDisconnect = viewModel::disconnect,
+                    onToggleLanguage = viewModel::toggleLanguage,
                     onSetBool = viewModel::setBoolProperty,
                     onSetNumeric = viewModel::setNumericProperty,
                 )

@@ -11,6 +11,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 
 enum class SpecType(val code: Int) {
@@ -109,22 +110,27 @@ object SpecProperties {
 
     /** Properties the device is documented to accept SET for. RIDING_MODE is included because
      * all three of its documented values (P/D/S) are manufacturer presets within the region's
-     * legal speed cap - it does not let you exceed it. */
+     * legal speed cap - it does not let you exceed it.
+     *
+     * ATMOSPHERE_LIGHT went through a real scare during development: SET on it appeared to time
+     * out completely on a real 5 Pro, which looked like a device-side limitation and was
+     * temporarily made read-only. Root-caused instead to two real app bugs (see requestMutex's
+     * comment and SpecClient.requestWithRetry): concurrent BLE requests silently corrupting each
+     * other, and the device occasionally going silent on one exchange with no automatic retry.
+     * With those fixed (plus incrementing tid per request, see nextTid), repeated live tests set
+     * ATMOSPHERE_LIGHT through all three values with no failures. */
     val SETTABLE = setOf(
         "IS_LOCKED", "TAIL_LIGHT_IS_ON", "ENERGY_RECOVERY", "ASR_IS_ON", "AUTO_LIGHT", "TCS",
-        "INTELLIGENT_DOWNHILL", "HILL_PARKING", "ATMOSPHERE_LIGHT", "BLUETOOTH_SEARCH_ON",
-        "RIDING_MODE", "CRUISE_IS_ON", "MILEAGE_UNIT",
+        "INTELLIGENT_DOWNHILL", "HILL_PARKING", "BLUETOOTH_SEARCH_ON",
+        "RIDING_MODE", "CRUISE_IS_ON", "MILEAGE_UNIT", "ATMOSPHERE_LIGHT",
     )
 
     /** Properties that only accept a fixed set of values (confirmed against the plugin's own
      * setProperty calls, not guessed) - shown in the UI as cycle buttons instead of a free-text
-     * numeric field, since e.g. ENERGY_RECOVERY silently rejects anything other than 30/60/90. */
-    val CYCLE_VALUES: Map<String, List<Pair<Long, String>>> = mapOf(
-        "RIDING_MODE" to listOf(11L to "Walk", 2L to "Drive", 3L to "Sport"),
-        "ENERGY_RECOVERY" to listOf(30L to "Schwach", 60L to "Mittel", 90L to "Stark"),
-        "ATMOSPHERE_LIGHT" to listOf(0L to "Aus", 1L to "An", 2L to "Aktiv"),
-        "MILEAGE_UNIT" to listOf(1L to "km", 0L to "mi"),
-    )
+     * numeric field, since e.g. ENERGY_RECOVERY silently rejects anything other than 30/60/90.
+     * The values themselves (language-independent) live here; their display labels are bilingual
+     * and live in ui/Strings.kt ([com.scooterre.client.ui.cycleLabel]). */
+    val CYCLE_PROPERTIES = setOf("RIDING_MODE", "ENERGY_RECOVERY", "MILEAGE_UNIT", "ATMOSPHERE_LIGHT")
 
     /** Settable properties with a legal/safety catch that varies by country or situation - this
      * app can't know which jurisdiction an install is in or how it's being used, so instead of
@@ -138,15 +144,9 @@ object SpecProperties {
      * BLUETOOTH_SEARCH_ON, MILEAGE_UNIT - no EU or per-country rule found that plausibly restricts
      * these (MILEAGE_UNIT is a pure display preference, km vs. mi), and
      * RIDING_MODE, whose presets are already hardware-calibrated per-region by the manufacturer
-     * (see project research log) so the app can't exceed the local limit through it regardless. */
-    val REGION_SENSITIVE_WARNINGS = mapOf(
-        "CRUISE_IS_ON" to "Der Tempomat ist nicht in jedem Land offiziell freigeschaltet " +
-            "(z.B. in Deutschland nicht). Diese App kann nicht wissen, wo du unterwegs bist oder " +
-            "was dort erlaubt ist - das musst du selbst prüfen.",
-        "TAIL_LIGHT_IS_ON" to "Ein funktionierendes, eingeschaltetes Rücklicht ist in praktisch " +
-            "allen EU-Ländern beim Fahren im Straßenverkehr gesetzlich vorgeschrieben. Schalte es " +
-            "nur aus, wenn der Roller gerade nicht im Verkehr genutzt wird.",
-    )
+     * (see project research log) so the app can't exceed the local limit through it regardless.
+     * The warning text itself is bilingual and lives in ui/Strings.kt ([com.scooterre.client.ui.regionWarning]). */
+    val REGION_SENSITIVE_PROPERTIES = setOf("CRUISE_IS_ON", "TAIL_LIGHT_IS_ON")
 }
 
 /**
@@ -156,6 +156,28 @@ object SpecProperties {
 class SpecClient(private val ble: ScooterBleManager, private val keys: MiCrypto.SessionKeys) {
 
     private var appCounter = 0
+
+    // The reference probes (probes/spec_read.py, probes/set_prop.py) hardcode tid=1 too, but each
+    // of those is a one-shot script: connect, send ONE request, disconnect - tid=1 is never
+    // reused within a session there. This app keeps one BLE session alive for many consecutive
+    // GET/SET calls, and sending the SAME tid=1 for every single one of them is a plausible
+    // reason the device's own firmware sometimes rejects an otherwise-valid, correctly-encoded
+    // SET (confirmed via real device status=4097 rejections that Mi Home's requests - which very
+    // likely DO vary their tid - don't hit) - if the firmware keeps any short window of
+    // recently-seen transaction ids per property for duplicate/replay detection, a constant tid
+    // would occasionally look like an already-handled repeat. Incrementing per request costs
+    // nothing and matches how a real client would behave.
+    private var tidCounter = 1
+
+    // Android's BLE stack allows only ONE outstanding GATT operation at a time per connection -
+    // if two request() calls overlap (e.g. a UI action firing while a previous refresh/set is
+    // still in flight), the second writeCharacteristic() silently fails ("did not even start")
+    // instead of queuing. That failure was never checked, so the frame was just dropped, the
+    // scooter never saw a complete message, and the request timed out - which then permanently
+    // desyncs the AES-CCM frame counter from the device's for the rest of the session (see
+    // SpecProperties.SETTABLE's ATMOSPHERE_LIGHT comment for the counter-desync mechanics).
+    // Serializing every request through this mutex is the actual fix, not a workaround.
+    private val requestMutex = kotlinx.coroutines.sync.Mutex()
 
     private fun buildGetFrame(siid: Int, piid: Int, tid: Int = 1): ByteArray {
         val body = byteArrayOf(siid.toByte(), (piid and 0xFF).toByte(), (piid shr 8).toByte(), 0, 0)
@@ -179,19 +201,37 @@ class SpecClient(private val ble: ScooterBleManager, private val keys: MiCrypto.
         )
     }
 
+    /** Wraps at 16 bits since tid is packed as a u16 LE in the frame header. */
+    private fun nextTid(): Int {
+        val t = tidCounter
+        tidCounter = if (tidCounter >= 0xFFFF) 1 else tidCounter + 1
+        return t
+    }
+
     suspend fun get(property: SpecProperty, timeoutMs: Long = 8000L): SpecReadResult {
-        val frame = buildGetFrame(property.siid, property.piid)
-        val plaintext = request(frame, timeoutMs) ?: return SpecReadResult(property, ByteArray(0), -1)
+        val frame = buildGetFrame(property.siid, property.piid, nextTid())
+        val plaintext = requestWithRetry(frame, timeoutMs) ?: return SpecReadResult(property, ByteArray(0), -1)
         return parseSingleReply(property, plaintext)
     }
 
     suspend fun set(property: SpecProperty, value: ByteArray, timeoutMs: Long = 8000L): Int {
-        val frame = buildSetFrame(property.siid, property.piid, property.type.code, value)
-        val plaintext = request(frame, timeoutMs) ?: return -1
+        val frame = buildSetFrame(property.siid, property.piid, property.type.code, value, nextTid())
+        val plaintext = requestWithRetry(frame, timeoutMs) ?: return -1
         // SET reply element: [siid][piid u16][status u16] (7 bytes after the 6-byte header)
         if (plaintext.size < 11) return -1
         return (plaintext[9].toInt() and 0xFF) or ((plaintext[10].toInt() and 0xFF) shl 8)
     }
+
+    /** The scooter occasionally goes completely silent on one request in a sequence - fully
+     * acking receipt of our frame (so it's not a transmission problem on our end) and then never
+     * sending any reply at all, not even a CTR frame announcing one. Confirmed live via raw BLE
+     * logs: not caused by request rate (serialized, evenly-paced requests hit it too) and not a
+     * parsing bug (there is nothing to parse - zero bytes come back). A single silent retry with
+     * a fresh request (new AES-CCM counter value, so it's not literally a duplicate on the wire)
+     * papers over that one dropped exchange without hiding a real failure - if the retry also
+     * gets no reply, that's a genuine problem worth surfacing. */
+    private suspend fun requestWithRetry(frame: ByteArray, timeoutMs: Long): ByteArray? =
+        request(frame, timeoutMs) ?: request(frame, timeoutMs)
 
     private fun parseSingleReply(property: SpecProperty, pt: ByteArray): SpecReadResult {
         if (pt.size < 11) return SpecReadResult(property, ByteArray(0), -1)
@@ -206,8 +246,11 @@ class SpecClient(private val ble: ScooterBleManager, private val keys: MiCrypto.
     /** Sends one encrypted request and returns the decrypted device response, or null on timeout.
      * Subscribes to notifications BEFORE writing the CTR frame (via an UNDISPATCHED producer) so
      * a very fast device reply can't be emitted and lost before our own collection starts - see
-     * ChannelTransport.subscribeTo for the full rationale (this was the actual login blocker). */
-    private suspend fun request(frame: ByteArray, timeoutMs: Long): ByteArray? = coroutineScope {
+     * ChannelTransport.subscribeTo for the full rationale (this was the actual login blocker).
+     *
+     * Wrapped in [requestMutex]: the whole write-then-wait-for-reply exchange must run to
+     * completion before another one starts - see the mutex's own comment for why. */
+    private suspend fun request(frame: ByteArray, timeoutMs: Long): ByteArray? = requestMutex.withLock { coroutineScope {
         val payload = MiCrypto.encryptSpecFrame(keys, appCounter, frame)
         appCounter++
         val frames = payload.toChunks(Protocol.DEFAULT_FRAME_SIZE)
@@ -219,7 +262,12 @@ class SpecClient(private val ble: ScooterBleManager, private val keys: MiCrypto.
         suspend fun sendSeq(n: Int) {
             if (n in 1..frames.size) {
                 val data = byteArrayOf((n and 0xFF).toByte(), ((n shr 8) and 0xFF).toByte()) + frames[n - 1]
-                ble.write(charFor(Registers.SPEC_WRITE), data)
+                // The return value used to be silently discarded here - a failed write (e.g. the
+                // GATT stack rejecting an overlapping operation) looked identical to a successful
+                // one, and the scooter would just never receive that frame. Now at least visible
+                // in logs instead of manifesting only as a mystery timeout minutes later.
+                val ok = ble.write(charFor(Registers.SPEC_WRITE), data)
+                if (!ok) android.util.Log.e("SpecClient", "sendSeq($n) write failed - frame likely never reached the device")
             }
         }
 
@@ -289,5 +337,5 @@ class SpecClient(private val ble: ScooterBleManager, private val keys: MiCrypto.
             incomingJob.cancel()
             incoming.cancel()
         }
-    }
+    } }
 }

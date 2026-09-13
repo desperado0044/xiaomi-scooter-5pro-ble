@@ -36,56 +36,39 @@ import com.scooterre.client.protocol.SpecReadResult
 import com.scooterre.client.protocol.SpecType
 import com.scooterre.client.viewmodel.UiState
 
-private val GROUPS = listOf(
-    1 to "Fahrt & Akku",
-    2 to "Einstellungen",
-    3 to "Akku-Detail",
-    4 to "Identifikation",
-)
+private val GROUPS = listOf(1, 2, 3, 4)
 
-/** Scale factor + unit suffix for numeric properties. Confirmed against the plugin's own
- * UNITS table and verified raw-byte captures from the real device (docs/RESEARCH_LOG.md) -
- * several of these (distances, voltage, speeds) are FLOAT on the wire but actually store
- * value*100 as a whole-number float, e.g. raw 6050 -> 60.5 km. */
-private val UNITS: Map<String, Pair<Double, String>> = mapOf(
-    "VOLTAGE" to (0.01 to "V"),
-    "TOTAL_MILEAGE" to (0.01 to "km"),
-    "CURRENT_MILEAGE" to (0.01 to "km"),
-    "REMAINING_MILEAGE" to (0.01 to "km"),
-    "AVERAGE_SPEED" to (0.01 to "km/h"),
-    "HIGHEST_SPEED" to (0.01 to "km/h"),
+private fun tabName(siid: Int, s: AppStrings): String = when (siid) {
+    1 -> s.tabRideBattery
+    2 -> s.tabSettings
+    3 -> s.tabBatteryDetail
+    else -> s.tabIdentification
+}
+
+/** Scale factor for numeric properties. Confirmed against the plugin's own UNITS table and
+ * verified raw-byte captures from the real device (docs/RESEARCH_LOG.md) - several of these
+ * (distances, voltage, speeds) are FLOAT on the wire but actually store value*100 as a
+ * whole-number float, e.g. raw 6050 -> 60.5 km. The unit strings themselves are language-neutral
+ * (V, A, W, km, °C, %, mAh) except NUMBER_OF_CYCLES, handled separately in [unitSuffix]. */
+private val UNIT_SCALES: Map<String, Double> = mapOf(
+    "VOLTAGE" to 0.01, "TOTAL_MILEAGE" to 0.01, "CURRENT_MILEAGE" to 0.01, "REMAINING_MILEAGE" to 0.01,
+    "AVERAGE_SPEED" to 0.01, "HIGHEST_SPEED" to 0.01,
     // Confirmed against Xiaomi Home's live reading on the real device (0.03 A vs. our
     // undivided 3 A) - these are also stored as value*100 on the wire, like voltage/distance.
-    "CURRENT" to (0.01 to "A"),
-    "POWER" to (0.01 to "W"),
-    "BATTERY_LEVEL" to (1.0 to "%"),
-    "SOH" to (1.0 to "%"),
-    "REMAINING_BATTERY" to (1.0 to "mAh"),
-    "BATTERY_TEMPERATURE" to (1.0 to "°C"),
-    "SCOOTER_TEMPERATURE" to (1.0 to "°C"),
-    "NUMBER_OF_CYCLES" to (1.0 to "Zyklen"),
+    "CURRENT" to 0.01, "POWER" to 0.01,
+    "BATTERY_LEVEL" to 1.0, "SOH" to 1.0, "REMAINING_BATTERY" to 1.0,
+    "BATTERY_TEMPERATURE" to 1.0, "SCOOTER_TEMPERATURE" to 1.0, "NUMBER_OF_CYCLES" to 1.0,
 )
 
-private val FAULT_LABELS: Map<Long, String> = mapOf(
-    0L to "Normal", 10L to "Kommunikationsfehler Display", 11L to "Controller überlastet",
-    12L to "Controller-Fehler", 14L to "Fehler Gaskabel", 15L to "Fehler Bremshebel-Kabel",
-    18L to "Motorfehler", 21L to "Kommunikationsfehler Akku", 24L to "Überdruck im Akku",
-    28L to "Controller-Fehler", 29L to "Controller-Fehler", 39L to "Akkufehler",
-    40L to "Controller-Fehler", 45L to "Controller überhitzt", 50L to "Temperaturfehler Akku",
-    52L to "Akkufehler",
+private val UNIT_SUFFIX: Map<String, String> = mapOf(
+    "VOLTAGE" to "V", "TOTAL_MILEAGE" to "km", "CURRENT_MILEAGE" to "km", "REMAINING_MILEAGE" to "km",
+    "AVERAGE_SPEED" to "km/h", "HIGHEST_SPEED" to "km/h", "CURRENT" to "A", "POWER" to "W",
+    "BATTERY_LEVEL" to "%", "SOH" to "%", "REMAINING_BATTERY" to "mAh",
+    "BATTERY_TEMPERATURE" to "°C", "SCOOTER_TEMPERATURE" to "°C",
 )
 
-/** Human-readable labels for enum-valued properties. Confirmed against the plugin's own
- * ENUM_LABELS table, not guessed. */
-private val ENUM_LABELS: Map<String, Map<Long, String>> = mapOf(
-    "RIDING_MODE" to mapOf(11L to "Walk", 2L to "Drive", 3L to "Sport"),
-    "ENERGY_RECOVERY" to mapOf(30L to "Schwach", 60L to "Mittel", 90L to "Stark"),
-    "ATMOSPHERE_LIGHT" to mapOf(0L to "Aus", 1L to "An", 2L to "Aktiv"),
-    "IS_RIDING" to mapOf(0L to "Steht", 1L to "Übergang", 2L to "Fährt"),
-    "BATTERY_STATUS" to mapOf(1L to "OK"),
-    "MILEAGE_UNIT" to mapOf(1L to "km", 0L to "mi"),
-    "FAULT" to FAULT_LABELS,
-)
+private fun unitSuffix(name: String, lang: Lang): String? =
+    if (name == "NUMBER_OF_CYCLES") (if (lang == Lang.DE) "Zyklen" else "cycles") else UNIT_SUFFIX[name]
 
 /** PRODUCTION_DATE/ACTIVATION_DATE come back as bare digit strings (YYMMDD or YYYYMMDD) -
  * shown as an ISO date instead of the raw digits. */
@@ -104,9 +87,11 @@ fun DashboardScreen(
     state: UiState,
     onRefreshAll: () -> Unit,
     onDisconnect: () -> Unit,
+    onToggleLanguage: () -> Unit,
     onSetBool: (SpecProperty, Boolean) -> Unit,
     onSetNumeric: (SpecProperty, Long) -> Unit,
 ) {
+    val s = strings(state.language)
     Column(modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 4.dp),
@@ -115,7 +100,7 @@ fun DashboardScreen(
         ) {
             Column {
                 Text(
-                    state.deviceName ?: "Scooter 5 Pro",
+                    state.deviceName ?: s.fallbackDeviceName,
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -124,15 +109,16 @@ fun DashboardScreen(
             if (state.busy) {
                 CircularProgressIndicator(modifier = Modifier.padding(4.dp))
             } else {
-                Row {
-                    TextButton(onClick = onRefreshAll) { Text("Aktualisieren") }
-                    TextButton(onClick = onDisconnect) { Text("Trennen") }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = onRefreshAll) { Text(s.refreshButton) }
+                    TextButton(onClick = onDisconnect) { Text(s.disconnectButton) }
+                    TextButton(onClick = onToggleLanguage) { Text(if (state.language == Lang.DE) "🇩🇪" else "🇬🇧") }
                 }
             }
         }
         state.error?.let {
             Text(
-                "Fehler: $it",
+                "${s.errorPrefix}$it",
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(bottom = 4.dp),
@@ -141,22 +127,22 @@ fun DashboardScreen(
 
         var selectedTab by remember { mutableStateOf(0) }
         ScrollableTabRow(selectedTabIndex = selectedTab, edgePadding = 0.dp) {
-            GROUPS.forEachIndexed { index, (_, groupName) ->
+            GROUPS.forEachIndexed { index, siid ->
                 Tab(
                     selected = selectedTab == index,
                     onClick = { selectedTab = index },
-                    text = { Text(groupName) },
+                    text = { Text(tabName(siid, s)) },
                 )
             }
         }
 
-        val (activeSiid, _) = GROUPS[selectedTab]
+        val activeSiid = GROUPS[selectedTab]
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier.padding(top = 12.dp, bottom = 16.dp),
         ) {
             items(SpecProperties.ALL.filter { it.siid == activeSiid }, key = { it.name }) { property ->
-                PropertyRow(property, state.values[property.name], onSetBool, onSetNumeric)
+                PropertyRow(property, state.values[property.name], state.language, onSetBool, onSetNumeric)
             }
         }
     }
@@ -166,11 +152,13 @@ fun DashboardScreen(
 private fun PropertyRow(
     property: SpecProperty,
     result: SpecReadResult?,
+    lang: Lang,
     onSetBool: (SpecProperty, Boolean) -> Unit,
     onSetNumeric: (SpecProperty, Long) -> Unit,
 ) {
+    val s = strings(lang)
     val settable = property.name in SpecProperties.SETTABLE
-    val cycleOptions = SpecProperties.CYCLE_VALUES[property.name]
+    val isCycle = property.name in SpecProperties.CYCLE_PROPERTIES
     val isError = result != null && !result.ok
 
     Card(
@@ -186,12 +174,12 @@ private fun PropertyRow(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        friendlyName(property.name),
+                        propertyName(property.name, lang),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        displayValue(property, result),
+                        displayValue(property, result, lang, s),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Medium,
                         color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
@@ -201,12 +189,12 @@ private fun PropertyRow(
                 // Cycle-button properties (fixed value sets like RIDING_MODE, ENERGY_RECOVERY)
                 // need more width than fits next to the label - rendered as their own
                 // full-width row below instead (see branch further down).
-                if (settable && result?.ok == true && cycleOptions == null) {
+                if (settable && result?.ok == true && !isCycle) {
                     when (property.type) {
                         SpecType.BOOL -> {
                             val current = (result.value as? Long) == 1L
                             var showRegionWarning by remember { mutableStateOf(false) }
-                            val warningText = SpecProperties.REGION_SENSITIVE_WARNINGS[property.name]
+                            val warningText = regionWarning(property.name, lang)
                             Switch(
                                 checked = current,
                                 onCheckedChange = { turningOn ->
@@ -220,6 +208,7 @@ private fun PropertyRow(
                             if (showRegionWarning && warningText != null) {
                                 RegionWarningDialog(
                                     warningText = warningText,
+                                    strings = s,
                                     onConfirm = {
                                         showRegionWarning = false
                                         onSetBool(property, true)
@@ -228,14 +217,15 @@ private fun PropertyRow(
                                 )
                             }
                         }
-                        else -> NumericSetter(current = result.value as? Long ?: 0L, onSet = { onSetNumeric(property, it) })
+                        else -> NumericSetter(current = result.value as? Long ?: 0L, setLabel = s.setButton, onSet = { onSetNumeric(property, it) })
                     }
                 }
             }
 
-            if (settable && cycleOptions != null && result?.ok == true) {
+            if (settable && isCycle && result?.ok == true) {
                 CycleButtons(
-                    options = cycleOptions,
+                    propertyName = property.name,
+                    lang = lang,
                     current = result.value as? Long,
                     onSelect = { onSetNumeric(property, it) },
                     modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
@@ -246,25 +236,28 @@ private fun PropertyRow(
 }
 
 @Composable
-private fun RegionWarningDialog(warningText: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+private fun RegionWarningDialog(warningText: String, strings: AppStrings, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Rechtlicher Hinweis") },
-        text = { Text("$warningText Mit dem Aktivieren bestätigst du, dass du die Verantwortung dafür übernimmst.") },
-        confirmButton = { TextButton(onClick = onConfirm) { Text("Ich bestätige, aktivieren") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } },
+        title = { Text(strings.regionWarningTitle) },
+        text = { Text(warningText + strings.regionWarningConfirmSuffix) },
+        confirmButton = { TextButton(onClick = onConfirm) { Text(strings.regionWarningConfirmButton) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(strings.regionWarningCancelButton) } },
     )
 }
 
 @Composable
 private fun CycleButtons(
-    options: List<Pair<Long, String>>,
+    propertyName: String,
+    lang: Lang,
     current: Long?,
     onSelect: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val options = CYCLE_VALUES[propertyName] ?: return
     Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        for ((value, label) in options) {
+        for (value in options) {
+            val label = cycleLabel(propertyName, value, lang)
             val selected = current == value
             if (selected) {
                 Button(onClick = {}, enabled = false, modifier = Modifier.weight(1f)) { Text(label) }
@@ -280,7 +273,7 @@ private fun CycleButtons(
 }
 
 @Composable
-private fun NumericSetter(current: Long, onSet: (Long) -> Unit) {
+private fun NumericSetter(current: Long, setLabel: String, onSet: (Long) -> Unit) {
     var text by remember(current) { mutableStateOf(current.toString()) }
     Row(verticalAlignment = Alignment.CenterVertically) {
         OutlinedTextField(
@@ -289,20 +282,14 @@ private fun NumericSetter(current: Long, onSet: (Long) -> Unit) {
             modifier = Modifier.padding(end = 4.dp).weight(1f, fill = false),
             singleLine = true,
         )
-        TextButton(onClick = { text.toLongOrNull()?.let(onSet) }) { Text("Setzen") }
+        TextButton(onClick = { text.toLongOrNull()?.let(onSet) }) { Text(setLabel) }
     }
 }
 
-/** "REMAINING_MILEAGE" -> "Remaining mileage" - readable label without losing the exact
- * MIoT-spec name a technical reader might want (still shown verbatim in the value's status text
- * on error, e.g. "Fehler (status=...)"). */
-private fun friendlyName(name: String): String =
-    name.lowercase().split('_').joinToString(" ") { it.replaceFirstChar(Char::uppercase) }
-
-private fun displayValue(property: SpecProperty, result: SpecReadResult?): String {
-    if (result == null) return "…"
-    if (!result.ok) return "Fehler (status=${result.status})"
-    val v = result.value ?: return "–"
+private fun displayValue(property: SpecProperty, result: SpecReadResult?, lang: Lang, s: AppStrings): String {
+    if (result == null) return s.loadingPlaceholder
+    if (!result.ok) return s.errorStatusFormat(result.status)
+    val v = result.value ?: return s.emptyValuePlaceholder
 
     if (property.name == "RIDING_TIME") {
         val seconds = when (v) { is Long -> v; is Float -> v.toLong(); else -> null }
@@ -311,12 +298,12 @@ private fun displayValue(property: SpecProperty, result: SpecReadResult?): Strin
     if ((property.name == "PRODUCTION_DATE" || property.name == "ACTIVATION_DATE") && v is String) {
         return formatDateString(v)
     }
-    ENUM_LABELS[property.name]?.let { labels ->
-        val key = (v as? Long)
-        val label = labels[key]
-        return if (label != null) label else "Unbekannt ($v)"
+    if (hasEnumLabels(property.name)) {
+        val key = v as? Long
+        val label = key?.let { enumLabel(property.name, it, lang) }
+        return label ?: s.unknownValueFormat(v.toString())
     }
-    UNITS[property.name]?.let { (scale, unit) ->
+    UNIT_SCALES[property.name]?.let { scale ->
         val num = when (v) {
             is Long -> v * scale
             is Float -> v * scale
@@ -326,15 +313,19 @@ private fun displayValue(property: SpecProperty, result: SpecReadResult?): Strin
             val text = if (scale == 1.0) {
                 num.toLong().toString()
             } else {
-                val sep = java.text.DecimalFormatSymbols.getInstance().decimalSeparator
-                "%.2f".format(num).trimEnd('0').trimEnd(sep)
+                // Decimal separator follows the chosen app language, not the device locale -
+                // otherwise an English UI could still show "53,84" with a German-style comma.
+                val locale = if (lang == Lang.DE) java.util.Locale.GERMANY else java.util.Locale.US
+                val sep = java.text.DecimalFormatSymbols.getInstance(locale).decimalSeparator
+                "%.2f".format(locale, num).trimEnd('0').trimEnd(sep)
             }
-            return "$text $unit"
+            val unit = unitSuffix(property.name, lang)
+            return if (unit != null) "$text $unit" else text
         }
     }
     return when (v) {
-        is Boolean -> if (v) "An" else "Aus"
-        is Long -> if (property.type == SpecType.BOOL) (if (v == 1L) "An" else "Aus") else v.toString()
+        is Boolean -> if (v) s.boolOn else s.boolOff
+        is Long -> if (property.type == SpecType.BOOL) (if (v == 1L) s.boolOn else s.boolOff) else v.toString()
         else -> v.toString()
     }
 }
