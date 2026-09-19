@@ -546,3 +546,60 @@ erlaubt vollen authentifizierten Zugriff auf den Roller. Nicht committen (Repo h
 Alle temporären Downloads (Android-cmdline-tools-Zip, jadx-Zips, redundanter Blutter-Rerun-Output)
 nach Verifikation gelöscht, ~300MB freigegeben. Verbleibendes Arbeitsverzeichnis weiterhin unter
 `C:\tmp\scooter-re\`; Android-SDK/Tools dauerhaft unter `C:\Android\`.
+
+## Update 2026-09-19: Zweites Modell (5 Max) — Property-Tabelle live bestätigt, keine Erweiterung gefunden
+
+Nutzer besitzt zusätzlich einen **Xiaomi Electric Scooter 5 Max** (`xiaomi.scooter.5max`,
+MAC `AA:BB:CC:DD:EE:FF`) und möchte ihn in derselben App verwalten wie den 5 Pro.
+
+**Vorab recherchiert:** Die von diesem Projekt genutzte siid/piid-Tabelle ist NICHT die
+öffentliche MIoT-Spec. Über miot-spec.org bestätigt: Die öffentliche Spezifikation
+dokumentiert für `xiaomi.scooter.5pro` UND `xiaomi.scooter.5max` ausschließlich siid=1
+"Device Information" (5 generische Felder: Hersteller, Modell, Geräte-ID, Firmware,
+Seriennummer). Die eigentliche Telemetrie-/Steuerungstabelle ist eine proprietäre,
+undokumentierte lokale BLE-Erweiterung — es gibt also keine öffentliche Quelle, um
+Modellunterschiede vorab nachzuschlagen; nur ein Live-Test am echten Gerät kann das klären.
+
+**LTMK-Beschaffung:** `webui/get_ltmk.py`/`micloud_ltmk.py` funktionierten unverändert für
+das zweite Gerät — einfach die Ziel-MAC ändern und die PIN für den 5 Max angeben (beide
+Geräte hängen am selben Mi-Account). Kleiner, unabhängig gefundener Bug:
+`probes/spec_read.py`s `run()`-Funktion liest hartkodiert die Legacy-Datei
+`secrets/ltmk.hex` statt `dreame_auth.ltmk_path_for_mac(mac)` zu benutzen — mit der
+falschen (fremden) LTMK schlägt der Login mit `status=0x22` fehl, mit der richtigen
+per-MAC-Datei sofort `status=0x21` (OK). Kein Protokollunterschied, nur ein
+Skript-Fehler in diesem einen Probe; `dreame_auth.py`'s eigenes `ltmk_path_for_mac()`
+ist korrekt.
+
+**Gezielter Sweep (20 bekannte Properties über alle 5 siids 1/2/3/4/6), einzeln abgefragt
+(nicht gebündelt):** alle 20 kamen mit plausiblen, korrekten Werten zurück — u. a.
+`REMAINING_MILEAGE=60.5 km` (passt exakt zur offiziellen 60-km-Reichweiten-Spec des 5 Max),
+`ENERGY_RECOVERY=30` (bestätigt dasselbe 30/60/90-Enum wie der 5 Pro),
+`FIRMWARE_VERSION="2.7.0_0015.0016"`, `TIRE_MAINTENANCE`/`MORE_BATTERY_INFO`/`LOG_1`
+dekodieren alle im exakt selben Packed-Hex-Format wie beim 5 Pro.
+
+**Breiter Sweep zur Suche nach Max-exklusiven Properties (siid 1–8 × piid 1–25, je 200
+Kombinationen, einzeln abgefragt):** keine einzige Property jenseits der bekannten 51
+gefunden. Als Methodik-Gegenprobe wurde derselbe Sweep gegen den 5 Pro wiederholt (dessen
+lokal gecachte LTMK war zwischenzeitlich abgelaufen/rotiert — vermutlich durch die
+Mi-Home-App im Hintergrund, nicht durch eine bewusste Nutzeraktion; per Cloud+PIN neu
+geholt): identisches Ergebnis, identisches Statuscode-Paar für "unbekannt" (`status=0xf05d`
+= Service existiert nicht, z. B. siid 5/7/8 komplett; `status=0xf05f` = Property existiert
+nicht innerhalb eines vorhandenen Service, z. B. siid 6 piid>5) auf beiden Geräten. Das
+bestätigt die Sweep-Methodik selbst und zeigt: auch der 5 Pro hat im selben Bereich keine
+undokumentierten Extra-Properties — die 51-Properties-Tabelle ist für beide Modelle
+vollständig, nicht nur zufällig kompatibel für die getesteten 20.
+
+**Ergebnis: `SCOOTER_5_MAX`-Profil = `SCOOTER_5_PRO`-Profil, 1:1, ohne einen einzigen
+Unterschied** (siehe `SpecClient.kt`s `SpecProfiles`). Kotlin-Umbau auf eine
+`SpecProfile`-pro-Modell-Abstraktion plus Mehrgeräte-Verwaltung (Geräteauswahl-Screen)
+lief direkt im Anschluss (Plan lag in der lokalen Plan-Datei des Assistenten).
+
+**Unbestätigte Vermutung, nicht getestet:** Der Nutzer besitzt keine Basisversion
+"Xiaomi Electric Scooter 5" (ohne Pro/Max-Zusatz), vermutet aber, dass auch diese
+dieselbe Property-Tabelle nutzt, da alle drei Varianten vermutlich identische/sehr
+ähnliche Firmware fahren (gleiche MIoT-Geräteklasse `scooter:0000A077`, gleiche
+Generation). Plausibel angesichts der 1:1-Übereinstimmung zwischen Pro und Max, aber
+**nicht verifiziert** — bei Bedarf mit demselben Sweep-Verfahren nachprüfen, sobald ein
+solches Gerät verfügbar ist. Der App-Code behandelt ein unbekanntes Modell ohnehin per
+Fallback wie den 5 Pro (`SpecProfiles.forModel()`), ohne dass das extra kodiert werden
+müsste.

@@ -110,7 +110,10 @@ class ScooterBleManager(private val context: Context) {
         // A just-killed previous process can leave the OS Bluetooth stack in a state where this
         // callback never fires at all for the first attempt right after - without a bound here
         // that hangs the coroutine forever instead of failing fast enough for a caller to retry.
-        val result = withTimeoutOrNull(10_000L) { connectDeferred!!.await() } ?: false
+        // 8s, not longer: a real connection consistently completes within ~5s live against the
+        // actual scooter - 10s just made every failed/retried attempt (3 of them, back to back)
+        // take needlessly long before the user saw any feedback at all.
+        val result = withTimeoutOrNull(8_000L) { connectDeferred!!.await() } ?: false
         android.util.Log.d(TAG, "connect() result=$result")
         if (result) {
             val prioritySet = gatt?.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH) ?: false

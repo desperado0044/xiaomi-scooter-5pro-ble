@@ -3,6 +3,9 @@ package com.scooterre.client.ui
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -52,11 +55,23 @@ fun LoginScreen(
     onRetryWithPin: () -> Unit,
     onForgetSaved: () -> Unit,
     onToggleLanguage: () -> Unit,
+    onBackToPicker: () -> Unit,
+    onImportTextChanged: (String) -> Unit,
+    onImportDevice: () -> Unit,
 ) {
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     val context = LocalContext.current
     val s = strings(state.language)
+    // Reading an exported file straight in avoids re-typing/pasting a long code by hand - the
+    // file's whole content becomes the import text field's value, same as pasting it would.
+    val pickFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            val text = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                ?.toString(Charsets.UTF_8)
+            if (text != null) onImportTextChanged(text.trim())
+        }
+    }
 
     Column(
         modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(24.dp).verticalScroll(rememberScrollState()),
@@ -67,9 +82,42 @@ fun LoginScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Scooter 5 Pro", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
+            Text(s.addDeviceTitle, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
             TextButton(onClick = onToggleLanguage) { Text(if (state.language == Lang.DE) "🇩🇪" else "🇬🇧") }
         }
+        if (state.knownDevices.isNotEmpty()) {
+            TextButton(onClick = onBackToPicker) { Text(s.backToDeviceListButton) }
+        }
+
+        HorizontalDivider()
+        Text(s.importDeviceTitle, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text(
+            s.importDeviceHint,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        OutlinedTextField(
+            value = state.importText,
+            onValueChange = onImportTextChanged,
+            label = { Text(s.importFieldLabel) },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !state.busy,
+            minLines = 2,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(
+                onClick = { pickFileLauncher.launch("text/plain") },
+                enabled = !state.busy,
+                modifier = Modifier.weight(1f),
+            ) { Text(s.pickFileButton) }
+            Button(
+                onClick = onImportDevice,
+                enabled = !state.busy && state.importText.isNotBlank(),
+                modifier = Modifier.weight(1f),
+            ) { Text(s.importButton) }
+        }
+        HorizontalDivider()
+
         Text(
             s.loginSubtitle,
             style = MaterialTheme.typography.bodySmall,
@@ -155,6 +203,18 @@ fun LoginScreen(
                     Text(s.qrWaitingText)
                 }
                 state.qrLoginUrl?.let { url ->
+                    TextButton(onClick = {
+                        // Chrome Custom Tabs, NOT a raw WebView: this same login page is where a
+                        // Google-linked account's "Sign in with Google" step happens, and Google
+                        // deliberately refuses to complete OAuth inside an embedded WebView
+                        // (anti-phishing policy - confirmed live: a plain WebView here just renders
+                        // blank). A Custom Tab runs the real Chrome engine (so it isn't blocked)
+                        // while still feeling attached to the app - it opens over this screen and
+                        // the user comes right back, no full app-switch/home-screen round trip like
+                        // a plain ACTION_VIEW chooser needs. This is the single-device login path
+                        // for accounts with no separate Mi password.
+                        CustomTabsIntent.Builder().build().launchUrl(context, Uri.parse(url))
+                    }) { Text(s.webLoginButton) }
                     TextButton(onClick = {
                         // Explicit chooser so the user can pick the app that actually holds the
                         // scooter's account session - a plain ACTION_VIEW can silently land in a

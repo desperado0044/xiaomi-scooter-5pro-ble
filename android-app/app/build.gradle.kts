@@ -12,8 +12,8 @@ android {
         applicationId = "com.scooterre.client"
         minSdk = 26 // AES/CCM via the platform provider needs API 26+ (Conscrypt)
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.4"
+        versionCode = 4
+        versionName = "1.0"
     }
 
     buildTypes {
@@ -53,4 +53,5 @@ dependencies {
 
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("androidx.browser:browser:1.8.0")
 }

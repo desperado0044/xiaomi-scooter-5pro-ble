@@ -25,6 +25,21 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- scooterre://import?code=<export code> - lets a saved-device export code be
+                 imported via a plain link/deep-link tap (e.g. from a messaging app, or "adb shell
+                 am start -d ...") instead of manually pasting it into the import field - the exact
+                 same DeviceRegistry/SecureStore write the in-app paste field triggers, just a
+                 different entry point into it.
+                 scooterre://login?action=qr - opens the QR cloud-login screen the same way tapping
+                 the "QR-Login" button would, for devices where adb can route an Intent (am start)
+                 but not simulate a tap (INJECT_EVENTS blocked). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="scooterre" android:host="import" />
+                <data android:scheme="scooterre" android:host="login" />
+            </intent-filter>
         </activity>
     </application>
 </manifest>

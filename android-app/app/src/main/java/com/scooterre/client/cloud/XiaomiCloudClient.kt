@@ -23,8 +23,8 @@ data class QrLoginStart(val qrPng: ByteArray, val loginUrl: String)
 
 /** A device match from [XiaomiCloudClient.findDeviceByMac]: its cloud id, the shard/country it
  * lives on (needed for the follow-up askbluetoothkey call), and its user-given name in the
- * Xiaomi/Mi Home app (e.g. "Mein Roller") - shown in the UI instead of a hardcoded model name. */
-data class CloudDeviceMatch(val did: String, val country: String, val name: String?)
+ * Xiaomi/Mi Home app (e.g. "Mein Scooter") - shown in the UI instead of a hardcoded model name. */
+data class CloudDeviceMatch(val did: String, val country: String, val name: String?, val model: String?)
 
 /** Countries Xiaomi's cloud API is sharded across; we search all of them for the scooter's `did`. */
 private val CLOUD_SERVERS = listOf("cn", "de", "us", "ru", "tw", "sg", "in", "i2")
@@ -193,7 +193,7 @@ class XiaomiCloudClient {
             if (json.has("notificationUrl")) {
                 throw CloudException("Account requires 2FA (email/SMS verification) - please use QR login instead")
             }
-            throw CloudException("Invalid login or password (accounts linked via Google/Apple sign-in usually have no separate Mi password - use QR login instead)")
+            throw CloudException("Invalid login or password (accounts linked via Google/Apple sign-in usually have no separate Xiaomi password - use QR login instead)")
         }
         applyLoginJson(json)
     }
@@ -318,7 +318,8 @@ class XiaomiCloudClient {
                         ?.uppercase()?.replace(":", "")
                     if (devMac == target) {
                         val name = optStringOrNull(dev, "name")
-                        return CloudDeviceMatch(dev.getString("did"), country, name)
+                        val model = optStringOrNull(dev, "model")
+                        return CloudDeviceMatch(dev.getString("did"), country, name, model)
                     }
                 }
             }

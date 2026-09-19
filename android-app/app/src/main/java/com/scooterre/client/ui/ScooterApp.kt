@@ -30,6 +30,9 @@ fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
                     onRetryWithPin = viewModel::retryWithPin,
                     onForgetSaved = viewModel::forgetSavedLtmk,
                     onToggleLanguage = viewModel::toggleLanguage,
+                    onBackToPicker = viewModel::openDevicePicker,
+                    onImportTextChanged = viewModel::onImportTextChanged,
+                    onImportDevice = viewModel::importDevice,
                 )
                 Screen.DASHBOARD -> DashboardScreen(
                     state = state,
@@ -38,6 +41,16 @@ fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
                     onToggleLanguage = viewModel::toggleLanguage,
                     onSetBool = viewModel::setBoolProperty,
                     onSetNumeric = viewModel::setNumericProperty,
+                )
+                Screen.DEVICE_PICKER -> DevicePickerScreen(
+                    state = state,
+                    onSelectDevice = viewModel::connectKnownDevice,
+                    onForgetDevice = { viewModel.forgetDevice(it.mac) },
+                    onRenameDevice = { device, name -> viewModel.renameDevice(device.mac, name) },
+                    onExportDevice = { device -> viewModel.exportDevice(device.mac) },
+                    onDismissExportCode = viewModel::dismissExportCode,
+                    onAddDevice = viewModel::startAddDevice,
+                    onToggleLanguage = viewModel::toggleLanguage,
                 )
             }
         }

@@ -12,11 +12,15 @@ import com.scooterre.client.cloud.CloudException
 import com.scooterre.client.cloud.PinRequiredException
 import com.scooterre.client.cloud.QrLoginStart
 import com.scooterre.client.cloud.XiaomiCloudClient
+import com.scooterre.client.protocol.DeviceExport
+import com.scooterre.client.protocol.DeviceRegistry
+import com.scooterre.client.protocol.KnownDevice
 import com.scooterre.client.protocol.MiProtocol
 import com.scooterre.client.protocol.ProtocolException
 import com.scooterre.client.protocol.SecureStore
 import com.scooterre.client.protocol.SpecClient
-import com.scooterre.client.protocol.SpecProperties
+import com.scooterre.client.protocol.SpecProfile
+import com.scooterre.client.protocol.SpecProfiles
 import com.scooterre.client.protocol.SpecProperty
 import com.scooterre.client.protocol.SpecReadResult
 import com.scooterre.client.protocol.SpecType
@@ -40,7 +44,7 @@ const val DEFAULT_SCOOTER_MAC = ""
 private const val KEY_LAST_MAC = "last_mac"
 private const val KEY_LANG = "lang"
 
-enum class Screen { LOGIN, DASHBOARD }
+enum class Screen { LOGIN, DASHBOARD, DEVICE_PICKER }
 
 data class UiState(
     val screen: Screen = Screen.LOGIN,
@@ -49,6 +53,13 @@ data class UiState(
     // Preferably the name from the Xiaomi cloud account (finishCloudLogin), falling back to the
     // BLE-advertised name if picked from a scan, or null for a generic label in the dashboard.
     val deviceName: String? = null,
+    // Xiaomi cloud model string (e.g. "xiaomi.scooter.5max") for the device currently being
+    // added/connected - drives both the displayed model name and which SpecProfile applies.
+    val activeModel: String? = null,
+    val activeSpecProfile: SpecProfile = SpecProfiles.SCOOTER_5_PRO,
+    // Every scooter this app has ever connected to (MAC + cosmetic model/name) - shown on the
+    // DEVICE_PICKER screen so more than one can be kept side by side instead of one swappable slot.
+    val knownDevices: List<KnownDevice> = emptyList(),
     val hasSavedLtmk: Boolean = false,
     val busy: Boolean = false,
     val busyMessage: String = "",
@@ -61,6 +72,11 @@ data class UiState(
     val values: Map<String, SpecReadResult> = emptyMap(),
     val scanning: Boolean = false,
     val scanResults: List<FoundDevice> = emptyList(),
+    // Set after exportDevice() - shown as a dialog with the text + a share button, so a second
+    // person authorized on the same physical scooter (e.g. a spouse) can add it on their phone
+    // without repeating the cloud login/PIN dance.
+    val exportCode: String? = null,
+    val importText: String = "",
 )
 
 /**
@@ -74,6 +90,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     // MAC addresses aren't secret (advertised openly over BLE) - a plain, unencrypted prefs file
     // is enough just to save the user from re-scanning/retyping it on every app start.
     private val prefs = application.getSharedPreferences("scooter_prefs", Context.MODE_PRIVATE)
+    private val deviceRegistry = DeviceRegistry(application)
     private var protocol: MiProtocol? = null
 
     // Kept around across the "PIN required" round-trip so retryWithPin() doesn't have to repeat
@@ -82,10 +99,18 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     private var pendingDevice: CloudDeviceMatch? = null
 
     private val _state = MutableStateFlow(
-        UiState(
-            macAddress = prefs.getString(KEY_LAST_MAC, DEFAULT_SCOOTER_MAC) ?: DEFAULT_SCOOTER_MAC,
-            language = if (prefs.getString(KEY_LANG, "DE") == "EN") Lang.EN else Lang.DE,
-        )
+        run {
+            val known = deviceRegistry.list()
+            UiState(
+                // Land on the picker when scooters are already known (most returning users), or
+                // straight on LOGIN for a first-ever run - matches the old single-device app's
+                // behavior for exactly one saved device (the picker just becomes a 1-item list).
+                screen = if (known.isNotEmpty()) Screen.DEVICE_PICKER else Screen.LOGIN,
+                macAddress = prefs.getString(KEY_LAST_MAC, DEFAULT_SCOOTER_MAC) ?: DEFAULT_SCOOTER_MAC,
+                language = if (prefs.getString(KEY_LANG, "DE") == "EN") Lang.EN else Lang.DE,
+                knownDevices = known,
+            )
+        }
     )
     val state: StateFlow<UiState> = _state
 
@@ -101,10 +126,98 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
 
     fun onMacChanged(mac: String) {
         prefs.edit().putString(KEY_LAST_MAC, mac).apply()
-        _state.update { it.copy(macAddress = mac, deviceName = null, hasSavedLtmk = secureStore.loadLtmk(mac) != null) }
+        _state.update {
+            it.copy(macAddress = mac, deviceName = null, activeModel = null, hasSavedLtmk = secureStore.loadLtmk(mac) != null)
+        }
     }
 
     fun onPinChanged(pin: String) = _state.update { it.copy(pin = pin) }
+
+    /** Shows the saved-scooters list, refreshed from disk in case a device was added elsewhere. */
+    fun openDevicePicker() {
+        _state.update { it.copy(screen = Screen.DEVICE_PICKER, knownDevices = deviceRegistry.list(), error = null) }
+    }
+
+    /** Clears the add-device scratch fields and shows the login/add-device screen - used both for
+     * a first-ever run and for "add another scooter" from the picker. */
+    fun startAddDevice() {
+        _state.update {
+            it.copy(
+                screen = Screen.LOGIN, macAddress = DEFAULT_SCOOTER_MAC, deviceName = null,
+                activeModel = null, hasSavedLtmk = false, pin = "", error = null,
+            )
+        }
+    }
+
+    /** Connects to an already-known scooter using its saved key - the picker's tap-to-connect. */
+    fun connectKnownDevice(device: KnownDevice) = launchBusy(s.connectingSavedBusy) {
+        val ltmk = secureStore.loadLtmk(device.mac) ?: throw CloudException(s.noSavedKeyError(device.mac))
+        _state.update { it.copy(macAddress = device.mac, deviceName = device.name, activeModel = device.model) }
+        connectAndLogin(device.mac, ltmk)
+    }
+
+    /** Removes a saved scooter's key and its entry in the device list - offered from the picker. */
+    fun forgetDevice(mac: String) {
+        secureStore.clearLtmk(mac)
+        deviceRegistry.remove(mac)
+        _state.update { it.copy(knownDevices = deviceRegistry.list()) }
+    }
+
+    /** Sets a user-chosen label for a saved device - the only way to tell two same-model-table
+     * scooters (5 Pro vs. 5 Max: proven to answer BLE reads identically, see project research log)
+     * apart when a device was only ever connected via its saved key, which never learns the cloud
+     * model string (no cloud round-trip on that path). An empty [name] clears the label back to
+     * the generic/model-based fallback. */
+    /** Packs a saved device's MAC/model/name + its `ltmk` into one shareable text blob (see
+     * [DeviceExport]) - lets a second person authorized on the same physical scooter add it on
+     * their own phone via [importDevice] instead of repeating the cloud login/PIN dance. Sets
+     * [UiState.exportCode]; the UI shows it in a dialog with a share button. No-op (silently) if
+     * the device or its key isn't actually saved - can't happen from the picker UI, which only
+     * offers this action for devices already in the list. */
+    fun exportDevice(mac: String) {
+        val device = deviceRegistry.list().firstOrNull { it.mac.equals(mac, ignoreCase = true) } ?: return
+        val ltmk = secureStore.loadLtmk(mac) ?: return
+        _state.update { it.copy(exportCode = DeviceExport.encode(device, ltmk)) }
+    }
+
+    fun dismissExportCode() = _state.update { it.copy(exportCode = null) }
+
+    fun onImportTextChanged(text: String) = _state.update { it.copy(importText = text) }
+
+    /** Decodes an [exportDevice]-produced text blob and saves it directly - no cloud round-trip
+     * at all, since the whole point is avoiding that for someone who didn't do the original
+     * cloud login. Surfaces a generic error via the normal [UiState.error] field on anything that
+     * doesn't parse (the pasted text got mangled, wrong code, etc.). */
+    fun importDevice() {
+        val decoded = DeviceExport.decode(_state.value.importText)
+        if (decoded == null) {
+            _state.update { it.copy(error = s.importInvalidCodeError) }
+            return
+        }
+        val (device, ltmk) = decoded
+        secureStore.saveLtmk(device.mac, ltmk)
+        deviceRegistry.upsert(device)
+        _state.update {
+            it.copy(
+                importText = "", error = null,
+                knownDevices = deviceRegistry.list(),
+                screen = Screen.DEVICE_PICKER,
+            )
+        }
+    }
+
+    fun renameDevice(mac: String, name: String) {
+        deviceRegistry.setName(mac, name.ifBlank { null })
+        val updated = deviceRegistry.list()
+        _state.update {
+            it.copy(
+                knownDevices = updated,
+                // Keep the currently-connected device's displayed name in sync if it's the one
+                // being renamed, instead of only updating the (currently unseen) picker list.
+                deviceName = if (it.macAddress.equals(mac, ignoreCase = true)) name.ifBlank { null } else it.deviceName,
+            )
+        }
+    }
 
     private var scanJob: Job? = null
 
@@ -179,7 +292,17 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
                 _state.update { it.copy(qrWaiting = false, qrPng = null, qrLoginUrl = null) }
                 finishCloudLogin(cloud)
             } catch (e: Exception) {
-                _state.update { it.copy(qrWaiting = false, qrPng = null, qrLoginUrl = null, error = e.message ?: e.toString()) }
+                // finishCloudLogin() sets busy=true itself (it's not wrapped in launchBusy, since
+                // it's also called from the already-launchBusy-wrapped password/retryWithPin
+                // paths) - if it throws anything past its own PinRequiredException handling (e.g.
+                // the BLE connect failing after all retries), that busy=true was never cleared
+                // here, permanently disabling every button until the app was force-killed
+                // (confirmed live: reproducible whenever the scooter is unreachable during the
+                // QR-login path specifically - the password-login path is fine, it's wrapped in
+                // launchBusy which always resets busy in its own finally).
+                _state.update {
+                    it.copy(busy = false, qrWaiting = false, qrPng = null, qrLoginUrl = null, error = e.message ?: e.toString())
+                }
             }
         }
     }
@@ -191,7 +314,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         val mac = _state.value.macAddress
         val found = withContext(Dispatchers.IO) { cloud.findDeviceByMac(mac) }
             ?: throw CloudException(s.deviceNotFoundError(mac))
-        if (found.name != null) _state.update { it.copy(deviceName = found.name) }
+        _state.update { it.copy(deviceName = found.name ?: it.deviceName, activeModel = found.model) }
 
         updateBusyMessage(s.fetchingKeyBusy)
         try {
@@ -261,7 +384,15 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
                 continue
             }
             protocol = p
-            _state.update { it.copy(screen = Screen.DASHBOARD, error = null) }
+            val model = _state.value.activeModel
+            deviceRegistry.upsert(KnownDevice(mac = mac, model = model, name = _state.value.deviceName))
+            _state.update {
+                it.copy(
+                    screen = Screen.DASHBOARD, error = null,
+                    activeSpecProfile = SpecProfiles.forModel(model),
+                    knownDevices = deviceRegistry.list(),
+                )
+            }
             refreshAll()
             startAutoRefresh()
             return
@@ -296,7 +427,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
                     // at once, not visibly re-build the screen property by property the way the
                     // very first load after connecting does.
                     val results = mutableMapOf<String, SpecReadResult>()
-                    for (property in SpecProperties.ALL) {
+                    for (property in _state.value.activeSpecProfile.all) {
                         results[property.name] = withContext(Dispatchers.IO) { spec.get(property) }
                     }
                     _state.update { it.copy(values = it.values + results) }
@@ -320,17 +451,27 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         stopAutoRefresh()
         protocol?.dispose()
         protocol = null
-        _state.update { it.copy(screen = Screen.LOGIN, values = emptyMap(), error = null) }
+        val known = deviceRegistry.list()
+        _state.update {
+            it.copy(
+                screen = if (known.isNotEmpty()) Screen.DEVICE_PICKER else Screen.LOGIN,
+                values = emptyMap(), error = null, knownDevices = known,
+            )
+        }
     }
 
     fun forgetSavedLtmk() {
-        secureStore.clearLtmk(_state.value.macAddress)
-        _state.update { it.copy(hasSavedLtmk = false) }
+        val mac = _state.value.macAddress
+        secureStore.clearLtmk(mac)
+        deviceRegistry.remove(mac)
+        _state.update { it.copy(hasSavedLtmk = false, knownDevices = deviceRegistry.list()) }
     }
 
     fun refreshAll() = launchBusy(s.readingValuesBusy) {
         val spec = protocol?.requireSpecClient() ?: return@launchBusy
-        for (property in SpecProperties.ALL) {
+        val profile = _state.value.activeSpecProfile
+        for (property in profile.all) {
+            if (property.name in profile.writeOnly) continue
             val result = withContext(Dispatchers.IO) { spec.get(property) }
             _state.update { it.copy(values = it.values + (property.name to result)) }
         }
@@ -345,7 +486,10 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     fun setBoolProperty(property: SpecProperty, value: Boolean) = launchBusy(null) {
         val spec = protocol?.requireSpecClient() ?: return@launchBusy
         val status = withContext(Dispatchers.IO) { spec.set(property, encodeValue(SpecType.BOOL, if (value) 1L else 0L)) }
-        refreshOneNow(spec, property)
+        // A write-only property (see SpecProfile.writeOnly) has no readable value to confirm
+        // against - GET on it always fails, so skip the read-back entirely rather than surface a
+        // spurious error for a SET that actually succeeded.
+        if (property.name !in _state.value.activeSpecProfile.writeOnly) refreshOneNow(spec, property)
         // The scooter can silently reject a SET (wrong precondition, unsupported in this state,
         // etc.) - without checking this, a failed write looked indistinguishable from the switch
         // just not reacting to the tap, with no indication anything went wrong (see IS_LOCKED

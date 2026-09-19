@@ -30,24 +30,25 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.scooterre.client.protocol.SpecProperties
+import com.scooterre.client.protocol.SpecProfile
 import com.scooterre.client.protocol.SpecProperty
 import com.scooterre.client.protocol.SpecReadResult
 import com.scooterre.client.protocol.SpecType
 import com.scooterre.client.viewmodel.UiState
 
-/** Tabs are curated by topic, not by raw MIoT siid - see SpecProperties.TAB_* for why and the
- * exact property lists. Settings only ever contains SpecProperties.SETTABLE, nothing read-only. */
-private val TABS: List<Pair<(AppStrings) -> String, List<String>>> = listOf(
-    { s: AppStrings -> s.tabRide } to SpecProperties.TAB_RIDE,
-    { s: AppStrings -> s.tabBattery } to SpecProperties.TAB_BATTERY,
-    { s: AppStrings -> s.tabSettings } to SpecProperties.TAB_SETTINGS,
-    { s: AppStrings -> s.tabVehicleStatus } to SpecProperties.TAB_VEHICLE_STATUS,
-    { s: AppStrings -> s.tabIdentification } to SpecProperties.TAB_IDENTIFICATION,
-    { s: AppStrings -> s.tabRideLog } to SpecProperties.TAB_RIDE_LOG,
+/** Tabs are curated by topic, not by raw MIoT siid - see [SpecProfile]'s tab* fields for why and
+ * the exact property lists. Settings only ever contains the active profile's settable set,
+ * nothing read-only. Built from the connected device's own profile (not a fixed global table) so
+ * a second scooter model with a different property set would render correctly without this file
+ * needing to know about it. */
+private fun tabsFor(profile: SpecProfile): List<Pair<(AppStrings) -> String, List<String>>> = listOf(
+    { s: AppStrings -> s.tabRide } to profile.tabRide,
+    { s: AppStrings -> s.tabBattery } to profile.tabBattery,
+    { s: AppStrings -> s.tabSettings } to profile.tabSettings,
+    { s: AppStrings -> s.tabVehicleStatus } to profile.tabVehicleStatus,
+    { s: AppStrings -> s.tabIdentification } to profile.tabIdentification,
+    { s: AppStrings -> s.tabRideLog } to profile.tabRideLog,
 )
-
-private val PROPERTIES_BY_NAME = SpecProperties.ALL.associateBy { it.name }
 
 /** Scale factor for numeric properties. Confirmed against the plugin's own UNITS table and
  * verified raw-byte captures from the real device (docs/RESEARCH_LOG.md) - several of these
@@ -96,6 +97,9 @@ fun DashboardScreen(
     onSetNumeric: (SpecProperty, Long) -> Unit,
 ) {
     val s = strings(state.language)
+    val profile = state.activeSpecProfile
+    val tabs = tabsFor(profile)
+    val propertiesByName = profile.all.associateBy { it.name }
     Column(modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 4.dp),
@@ -104,7 +108,7 @@ fun DashboardScreen(
         ) {
             Column {
                 Text(
-                    state.deviceName ?: s.fallbackDeviceName,
+                    state.deviceName ?: modelDisplayName(state.activeModel, state.language),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -131,7 +135,7 @@ fun DashboardScreen(
 
         var selectedTab by remember { mutableStateOf(0) }
         ScrollableTabRow(selectedTabIndex = selectedTab, edgePadding = 0.dp) {
-            TABS.forEachIndexed { index, (nameFor, _) ->
+            tabs.forEachIndexed { index, (nameFor, _) ->
                 Tab(
                     selected = selectedTab == index,
                     onClick = { selectedTab = index },
@@ -140,14 +144,14 @@ fun DashboardScreen(
             }
         }
 
-        val activeNames = TABS[selectedTab].second
-        val activeProperties = activeNames.mapNotNull { PROPERTIES_BY_NAME[it] }
+        val activeNames = tabs[selectedTab].second
+        val activeProperties = activeNames.mapNotNull { propertiesByName[it] }
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier.padding(top = 12.dp, bottom = 16.dp),
         ) {
             items(activeProperties, key = { it.name }) { property ->
-                PropertyRow(property, state.values[property.name], state.language, onSetBool, onSetNumeric)
+                PropertyRow(property, state.values[property.name], state.language, profile, onSetBool, onSetNumeric)
             }
         }
     }
@@ -158,13 +162,39 @@ private fun PropertyRow(
     property: SpecProperty,
     result: SpecReadResult?,
     lang: Lang,
+    profile: SpecProfile,
     onSetBool: (SpecProperty, Boolean) -> Unit,
     onSetNumeric: (SpecProperty, Long) -> Unit,
 ) {
     val s = strings(lang)
-    val settable = property.name in SpecProperties.SETTABLE
-    val isCycle = property.name in SpecProperties.CYCLE_PROPERTIES
+    val settable = property.name in profile.settable
+    val isCycle = property.name in profile.cycleProperties
     val isError = result != null && !result.ok
+
+    // Write-only properties (see SpecProfile.writeOnly) never have a value to show - GET always
+    // fails for them - so they get their own simple "trigger" row instead of the usual
+    // label+value+switch layout, which would otherwise show a permanent, misleading error.
+    if (property.name in profile.writeOnly) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    propertyName(property.name, lang),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium,
+                )
+                Button(onClick = { onSetBool(property, true) }) { Text(s.triggerButton) }
+            }
+        }
+        return
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),

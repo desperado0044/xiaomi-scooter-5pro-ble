@@ -64,9 +64,36 @@ fun encodeValue(type: SpecType, value: Long): ByteArray {
     return ByteArray(size) { i -> ((value shr (8 * i)) and 0xFF).toByte() }
 }
 
+/** A model's full property catalog plus the UI/behavior metadata derived from it - one instance
+ * per supported scooter model (see [SpecProfiles]), so the rest of the app (DashboardScreen,
+ * ScooterViewModel) can be written once against "the active device's profile" instead of a single
+ * hardcoded global table. */
+data class SpecProfile(
+    val all: List<SpecProperty>,
+    val settable: Set<String>,
+    // Settable properties that permanently fail GET (confirmed via direct SET/GET probing from a
+    // PC BLE adapter, not guessed) - an action/trigger rather than a persisted setting, so there is
+    // no value to poll or display. refreshAll()/refreshOneNow() must skip these entirely; the UI
+    // renders them as a plain button instead of a value+switch row.
+    val writeOnly: Set<String>,
+    val cycleProperties: Set<String>,
+    val regionSensitiveProperties: Set<String>,
+    val tabRide: List<String>,
+    val tabBattery: List<String>,
+    val tabSettings: List<String>,
+    val tabVehicleStatus: List<String>,
+    val tabIdentification: List<String>,
+    val tabRideLog: List<String>,
+)
+
 /** Well-known properties from the MIoT spec, extracted from the Mi Home plugin by the
- * KuziaMother/SCOOTER_5_PRO project. Read-only where the device doesn't accept SET for them. */
-object SpecProperties {
+ * KuziaMother/SCOOTER_5_PRO project. Read-only where the device doesn't accept SET for them.
+ *
+ * This table was reverse-engineered against a physical 5 Pro. It is NOT the public MIoT spec -
+ * checked live against miot-spec.org, which documents only siid=1 "Device Information" (5 generic
+ * fields) for both `xiaomi.scooter.5pro` and `xiaomi.scooter.5max` - the real telemetry/control
+ * table is a proprietary local-BLE-only extension undocumented anywhere public. */
+private object SpecProperties {
     val ALL = listOf(
         SpecProperty(1, 1, "RIDING_MODE", SpecType.UINT8),
         SpecProperty(1, 2, "BATTERY_LEVEL", SpecType.UINT8),
@@ -109,10 +136,6 @@ object SpecProperties {
         // ui/DashboardScreen.kt's formatTireMaintenance for the decode.
         SpecProperty(3, 7, "TIRE_MAINTENANCE", SpecType.STRING),
         SpecProperty(3, 8, "ACTIVATION_DATE", SpecType.STRING),
-        // Confirmed to sometimes fail with a device-side error when read this way (see
-        // docs/RESEARCH_LOG.md) - harmless to include since a failed GET already surfaces as a
-        // normal "Fehler (status=...)" card like any other property read failure.
-        SpecProperty(3, 9, "RIDING_RECORDS", SpecType.STRING),
         SpecProperty(3, 10, "IS_CHARGING", SpecType.BOOL),
         SpecProperty(3, 11, "NUMBER_OF_CYCLES", SpecType.UINT8),
         SpecProperty(3, 12, "SOH", SpecType.UINT8),
@@ -124,13 +147,26 @@ object SpecProperties {
         // Hex-encoded structured strings - see ui/DashboardScreen.kt's formatMoreBatteryInfo/2.
         SpecProperty(4, 7, "MORE_BATTERY_INFO", SpecType.STRING),
         SpecProperty(4, 8, "MORE_BATTERY_INFO_2", SpecType.STRING),
-        // Read-only here even though it's BOOL: not in the reference plugin's own WRITABLE list
-        // either (unverified as safe to SET, possibly a "find my scooter" beeper/light action).
+        // NOT a display property: GET on (4,10) permanently fails with status=0xf05f ("piid does
+        // not exist") on both the 5 Pro and 5 Max - but SET succeeds (status=0) AND was confirmed
+        // live 2026-09-19 to make the physical scooter beep/flash to help find it. It's a write-only
+        // action/trigger, not a persisted setting - see [SpecProfile.writeOnly] and
+        // ui/DashboardScreen.kt's write-only button rendering. Do not add a GET for this piid back;
+        // it will always fail.
         SpecProperty(4, 10, "BLUETOOTH_CAR_SEARCH", SpecType.BOOL),
         // Ride history log, 5 slots (each holds a handful of packed ride records) - see
         // ui/DashboardScreen.kt's formatRideLog. (3,6) OOB_CODE (pairing secret) and (4,6)
         // RESTORE_SCOOTER_SETTINGS (factory-reset action) are deliberately never exposed at all,
         // matching the reference plugin's own SENSITIVE/DANGEROUS_EXCLUDED classification.
+        //
+        // (3,9) RIDING_RECORDS is deliberately NOT listed here, unlike BLUETOOTH_CAR_SEARCH above:
+        // GET also permanently fails with 0xf05f, and SET *is* accepted (status=0) - but a live SET
+        // probe (2026-09-19) followed by re-reading LOG_1..LOG_5 showed byte-for-byte identical ride
+        // log data before and after, and no other side effect was observed (no async notify, GET
+        // still fails afterward). Unlike BLUETOOTH_CAR_SEARCH's confirmed, understandable beep/flash
+        // effect, this SET has no known positive purpose - exposing a button for an action nobody
+        // can explain the effect of would be worse than not having it. The actual ride records this
+        // was presumably meant to expose are already fully available via LOG_1..LOG_5 below.
         SpecProperty(6, 1, "LOG_1", SpecType.STRING),
         SpecProperty(6, 2, "LOG_2", SpecType.STRING),
         SpecProperty(6, 3, "LOG_3", SpecType.STRING),
@@ -153,7 +189,11 @@ object SpecProperties {
         "IS_LOCKED", "TAIL_LIGHT_IS_ON", "ENERGY_RECOVERY", "ASR_IS_ON", "AUTO_LIGHT", "TCS",
         "INTELLIGENT_DOWNHILL", "HILL_PARKING", "BLUETOOTH_SEARCH_ON",
         "RIDING_MODE", "CRUISE_IS_ON", "MILEAGE_UNIT", "ATMOSPHERE_LIGHT",
+        "BLUETOOTH_CAR_SEARCH",
     )
+
+    /** See [SpecProfile.writeOnly]'s doc comment - properties here must never receive a GET. */
+    val WRITE_ONLY = setOf("BLUETOOTH_CAR_SEARCH")
 
     /** Properties that only accept a fixed set of values (confirmed against the plugin's own
      * setProperty calls, not guessed) - shown in the UI as cycle buttons instead of a free-text
@@ -209,7 +249,50 @@ object SpecProperties {
         "PRODUCTION_DATE", "ACTIVATION_DATE", "SCOOTER_SN", "BATTERY_SN",
         "FIRMWARE_VERSION", "BMS_FIRMWARE_VERSION",
     )
-    val TAB_RIDE_LOG = listOf("LOG_1", "LOG_2", "LOG_3", "LOG_4", "LOG_5", "RIDING_RECORDS")
+    val TAB_RIDE_LOG = listOf("LOG_1", "LOG_2", "LOG_3", "LOG_4", "LOG_5")
+}
+
+/** Selects the right [SpecProfile] for a scooter model, keyed by the Xiaomi cloud's own model
+ * string (e.g. `xiaomi.scooter.5max`, as returned alongside `did` from `findDeviceByMac`). */
+object SpecProfiles {
+    const val MODEL_5PRO = "xiaomi.scooter.5pro"
+    const val MODEL_5MAX = "xiaomi.scooter.5max"
+
+    val SCOOTER_5_PRO = SpecProfile(
+        all = SpecProperties.ALL,
+        settable = SpecProperties.SETTABLE,
+        writeOnly = SpecProperties.WRITE_ONLY,
+        cycleProperties = SpecProperties.CYCLE_PROPERTIES,
+        regionSensitiveProperties = SpecProperties.REGION_SENSITIVE_PROPERTIES,
+        tabRide = SpecProperties.TAB_RIDE,
+        tabBattery = SpecProperties.TAB_BATTERY,
+        tabSettings = SpecProperties.TAB_SETTINGS,
+        tabVehicleStatus = SpecProperties.TAB_VEHICLE_STATUS,
+        tabIdentification = SpecProperties.TAB_IDENTIFICATION,
+        tabRideLog = SpecProperties.TAB_RIDE_LOG,
+    )
+
+    /** CONFIRMED identical to the 5 Pro's table, not just assumed - live-verified 2026-09-19 via a
+     * per-property GET sweep from a PC BLE adapter against a physical 5 Max (MAC AA:BB:CC:DD:EE:FF):
+     * 20 properties spanning every siid (1,2,3,4,6) all returned correct, plausible values
+     * (REMAINING_MILEAGE=60.5km matching the model's official 60km-range spec, ENERGY_RECOVERY's
+     * 30/60/90 enum, TIRE_MAINTENANCE/MORE_BATTERY_INFO/LOG_1 all decoding in the exact same
+     * packed-hex formats as the 5 Pro). A follow-up wide sweep (siid 1-8, piid 1-25) found no
+     * properties beyond these 51 on either model, using an identical, self-consistent
+     * "unknown siid" vs. "unknown piid" status-code pair (0xf05d/0xf05f) on both devices as a
+     * cross-check that the sweep methodology itself was sound. See project memory / RESEARCH_LOG
+     * for the full sweep transcripts. */
+    val SCOOTER_5_MAX = SCOOTER_5_PRO
+
+    /** Falls back to the 5 Pro's table for any unrecognized/unknown model string (including a
+     * plain "xiaomi.scooter.5" base model, never owned/tested by this project) rather than
+     * refusing to connect - this table has so far held up unchanged across two tested variants of
+     * the same scooter generation, so it's a reasonable starting point, just not a verified one
+     * for anything beyond the 5 Pro and 5 Max specifically. */
+    fun forModel(model: String?): SpecProfile = when (model) {
+        MODEL_5MAX -> SCOOTER_5_MAX
+        else -> SCOOTER_5_PRO
+    }
 }
 
 /**
