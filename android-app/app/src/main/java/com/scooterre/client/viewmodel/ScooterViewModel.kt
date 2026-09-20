@@ -12,10 +12,13 @@ import com.scooterre.client.cloud.CloudException
 import com.scooterre.client.cloud.PinRequiredException
 import com.scooterre.client.cloud.QrLoginStart
 import com.scooterre.client.cloud.XiaomiCloudClient
+import com.scooterre.client.protocol.BatteryHistoryStore
 import com.scooterre.client.protocol.DeviceExport
 import com.scooterre.client.protocol.DeviceRegistry
 import com.scooterre.client.protocol.KnownDevice
 import com.scooterre.client.protocol.MiProtocol
+import com.scooterre.client.protocol.ModeEfficiencyTotals
+import com.scooterre.client.protocol.PendingRideDelta
 import com.scooterre.client.protocol.ProtocolException
 import com.scooterre.client.protocol.SecureStore
 import com.scooterre.client.protocol.SpecClient
@@ -26,8 +29,10 @@ import com.scooterre.client.protocol.SpecReadResult
 import com.scooterre.client.protocol.SpecType
 import com.scooterre.client.protocol.encodeValue
 import com.scooterre.client.ui.Lang
+import com.scooterre.client.ui.modelDisplayName
 import com.scooterre.client.ui.propertyName
 import com.scooterre.client.ui.strings
+import com.scooterre.client.widget.ScooterWidgetUpdater
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -77,6 +82,15 @@ data class UiState(
     // without repeating the cloud login/PIN dance.
     val exportCode: String? = null,
     val importText: String = "",
+    // Set right after a fresh connect if the odometer/battery moved meaningfully since the last
+    // time this device was seen - the app has no background service, so it cannot know which
+    // riding mode was active during that gap; the UI asks the person who actually rode it instead
+    // of guessing. Null once resolved (attributed or explicitly skipped) - see BatteryHistoryStore.
+    val pendingRideDelta: PendingRideDelta? = null,
+    // Lifetime km ridden + real-world Wh/km per riding mode (11=Walk, 2=Drive, 3=Sport), shown on
+    // the "Verlauf" tab - a battery-health signal the device's own SOH% doesn't capture, since it
+    // reflects actual energy cost per km rather than the device's own internal estimate.
+    val efficiencyTotals: Map<Long, ModeEfficiencyTotals> = emptyMap(),
 )
 
 /**
@@ -91,6 +105,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     // is enough just to save the user from re-scanning/retyping it on every app start.
     private val prefs = application.getSharedPreferences("scooter_prefs", Context.MODE_PRIVATE)
     private val deviceRegistry = DeviceRegistry(application)
+    private val batteryHistoryStore = BatteryHistoryStore(application)
     private var protocol: MiProtocol? = null
 
     // Kept around across the "PIN required" round-trip so retryWithPin() doesn't have to repeat
@@ -431,6 +446,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
                         results[property.name] = withContext(Dispatchers.IO) { spec.get(property) }
                     }
                     _state.update { it.copy(values = it.values + results) }
+                    pushWidgetUpdate()
                 } catch (e: Exception) {
                     android.util.Log.w("ScooterVM", "auto-refresh tick failed", e)
                 }
@@ -475,6 +491,91 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
             val result = withContext(Dispatchers.IO) { spec.get(property) }
             _state.update { it.copy(values = it.values + (property.name to result)) }
         }
+        checkPendingRide()
+        _state.update { it.copy(efficiencyTotals = batteryHistoryStore.totals(it.macAddress)) }
+        pushWidgetUpdate()
+    }
+
+    /** Pushes the latest known status to the home-screen widget (see [ScooterWidgetUpdater]) -
+     * cheap no-op if no widget is placed. Called after every full refresh, manual or automatic,
+     * so the widget reflects whatever the app itself last saw without a separate poll of its own. */
+    private fun pushWidgetUpdate() {
+        val state = _state.value
+        fun long(name: String): Long? = state.values[name]?.takeIf { it.ok }?.value as? Long
+        fun float(name: String): Double? = when (val v = state.values[name]?.takeIf { it.ok }?.value) {
+            is Float -> v.toDouble()
+            is Long -> v.toDouble()
+            else -> null
+        }
+        viewModelScope.launch {
+            ScooterWidgetUpdater.update(
+                context = getApplication(),
+                deviceName = state.deviceName ?: modelDisplayName(state.activeModel, state.language),
+                mac = state.macAddress,
+                batteryLevel = long("BATTERY_LEVEL"),
+                isLocked = long("IS_LOCKED")?.let { it == 1L },
+                remainingKm = float("REMAINING_MILEAGE")?.let { it * 0.01 },
+                lang = state.language.name,
+            )
+        }
+    }
+
+    /** Runs once per connection, right after the first full [refreshAll] populates
+     * TOTAL_MILEAGE/REMAINING_BATTERY/VOLTAGE - compares them against the last known reading for
+     * this device (see [BatteryHistoryStore.checkForPendingRide]) and, if the odometer moved
+     * meaningfully since then, surfaces a dialog asking which riding mode that reflects. The app
+     * has no background service (see project research log), so it genuinely cannot know this on
+     * its own for a ride that happened while it was closed - asking beats silently guessing or
+     * silently discarding the distance/energy entirely. */
+    private fun checkPendingRide() {
+        val values = _state.value.values
+        fun long(name: String): Long? = values[name]?.takeIf { it.ok }?.value as? Long
+        fun float(name: String): Double? = when (val v = values[name]?.takeIf { it.ok }?.value) {
+            is Float -> v.toDouble()
+            is Long -> v.toDouble()
+            else -> null
+        }
+        val km = float("TOTAL_MILEAGE")?.let { it * 0.01 } ?: return
+        val mah = long("REMAINING_BATTERY") ?: return
+        val voltage = float("VOLTAGE")?.let { it * 0.01 } ?: return
+        val delta = batteryHistoryStore.checkForPendingRide(_state.value.macAddress, km, mah, voltage) ?: return
+        _state.update { it.copy(pendingRideDelta = delta) }
+    }
+
+    /** The user answered the pending-ride dialog with the mode they mostly rode in - folds the
+     * delta into that mode's lifetime total. [mode] is the raw RIDING_MODE value (11=Walk,
+     * 2=Drive, 3=Sport), matching [com.scooterre.client.ui.CYCLE_VALUES]. */
+    fun attributeRideMode(mode: Long) {
+        val delta = _state.value.pendingRideDelta ?: return
+        val (km, mah, voltage) = currentOdometerReading() ?: return
+        batteryHistoryStore.attributeRide(_state.value.macAddress, mode, delta, km, mah, voltage)
+        _state.update { it.copy(pendingRideDelta = null, efficiencyTotals = batteryHistoryStore.totals(it.macAddress)) }
+    }
+
+    /** The user dismissed the pending-ride dialog without picking a mode - the distance/energy is
+     * dropped (not counted toward any mode), but the reference point still advances so the same
+     * gap isn't asked about again on the next connect. */
+    fun skipPendingRide() {
+        if (_state.value.pendingRideDelta == null) return
+        val (km, mah, voltage) = currentOdometerReading() ?: return
+        batteryHistoryStore.skipPendingRide(_state.value.macAddress, km, mah, voltage)
+        _state.update { it.copy(pendingRideDelta = null) }
+    }
+
+    /** Wipes the active device's accumulated efficiency totals - offered behind a confirmation
+     * dialog in the UI, e.g. useful after a battery replacement. */
+    fun resetEfficiencyHistory() {
+        val mac = _state.value.macAddress
+        batteryHistoryStore.clear(mac)
+        _state.update { it.copy(efficiencyTotals = batteryHistoryStore.totals(mac)) }
+    }
+
+    private fun currentOdometerReading(): Triple<Double, Long, Double>? {
+        val values = _state.value.values
+        val km = (values["TOTAL_MILEAGE"]?.takeIf { it.ok }?.value as? Float)?.let { it * 0.01 } ?: return null
+        val mah = values["REMAINING_BATTERY"]?.takeIf { it.ok }?.value as? Long ?: return null
+        val voltage = (values["VOLTAGE"]?.takeIf { it.ok }?.value as? Float)?.let { it * 0.01 } ?: return null
+        return Triple(km, mah, voltage)
     }
 
     fun refreshOne(property: SpecProperty) = launchBusy(null) {
@@ -500,6 +601,16 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     fun setNumericProperty(property: SpecProperty, value: Long) = launchBusy(null) {
         val spec = protocol?.requireSpecClient() ?: return@launchBusy
         val status = withContext(Dispatchers.IO) { spec.set(property, encodeValue(property.type, value)) }
+        refreshOneNow(spec, property)
+        if (status != 0) throw ProtocolException(s.setRejectedError(propertyName(property.name, _state.value.language), status))
+    }
+
+    /** For STRING-type settable properties (currently just TIRE_MAINTENANCE's packed
+     * state+interval+remaining-days string) - [encodeValue] deliberately has no STRING overload
+     * (see its own doc comment), so this writes the raw ASCII bytes directly instead. */
+    fun setStringProperty(property: SpecProperty, value: String) = launchBusy(null) {
+        val spec = protocol?.requireSpecClient() ?: return@launchBusy
+        val status = withContext(Dispatchers.IO) { spec.set(property, value.toByteArray(Charsets.US_ASCII)) }
         refreshOneNow(spec, property)
         if (status != 0) throw ProtocolException(s.setRejectedError(propertyName(property.name, _state.value.language), status))
     }

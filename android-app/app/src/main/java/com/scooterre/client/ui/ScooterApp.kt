@@ -41,6 +41,10 @@ fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
                     onToggleLanguage = viewModel::toggleLanguage,
                     onSetBool = viewModel::setBoolProperty,
                     onSetNumeric = viewModel::setNumericProperty,
+                    onSetString = viewModel::setStringProperty,
+                    onAttributeRideMode = viewModel::attributeRideMode,
+                    onSkipPendingRide = viewModel::skipPendingRide,
+                    onResetHistory = viewModel::resetEfficiencyHistory,
                 )
                 Screen.DEVICE_PICKER -> DevicePickerScreen(
                     state = state,

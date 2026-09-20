@@ -133,7 +133,12 @@ private object SpecProperties {
         SpecProperty(3, 4, "LOCK_WARNING", SpecType.UINT8),
         SpecProperty(3, 5, "MILEAGE_UNIT", SpecType.UINT8),
         // Packed decimal string "[state 1][interval 3][remaining-days 3]" - see
-        // ui/DashboardScreen.kt's formatTireMaintenance for the decode.
+        // ui/DashboardScreen.kt's formatTireMaintenance for the decode. Confirmed settable
+        // 2026-09-20 via a live SET probe (status=0, echoing the unchanged value back) after the
+        // user noticed Xiaomi Home lets you toggle this reminder on/off - state digit semantics
+        // ('2'=off, otherwise on) were already known from the reference plugin's own logic, not
+        // guessed, so wiring up the toggle (see PropertyRow's TIRE_MAINTENANCE special case) only
+        // required confirming SET itself works, not reverse-engineering the value format again.
         SpecProperty(3, 7, "TIRE_MAINTENANCE", SpecType.STRING),
         SpecProperty(3, 8, "ACTIVATION_DATE", SpecType.STRING),
         SpecProperty(3, 10, "IS_CHARGING", SpecType.BOOL),
@@ -189,7 +194,7 @@ private object SpecProperties {
         "IS_LOCKED", "TAIL_LIGHT_IS_ON", "ENERGY_RECOVERY", "ASR_IS_ON", "AUTO_LIGHT", "TCS",
         "INTELLIGENT_DOWNHILL", "HILL_PARKING", "BLUETOOTH_SEARCH_ON",
         "RIDING_MODE", "CRUISE_IS_ON", "MILEAGE_UNIT", "ATMOSPHERE_LIGHT",
-        "BLUETOOTH_CAR_SEARCH",
+        "BLUETOOTH_CAR_SEARCH", "TIRE_MAINTENANCE",
     )
 
     /** See [SpecProfile.writeOnly]'s doc comment - properties here must never receive a GET. */
