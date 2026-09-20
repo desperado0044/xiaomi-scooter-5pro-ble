@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -52,6 +53,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.scooterre.client.protocol.PendingRideDelta
@@ -363,7 +365,7 @@ private fun OverviewContent(
 
     Column(
         modifier = Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             BigStatCard(
@@ -421,15 +423,98 @@ private fun OverviewContent(
             }
         }
 
-        // Beyond the two hero numbers and mode badge above: everything else genuinely useful to
-        // glance at during or right around a ride, so the Overview answers "how's the ride going"
-        // on its own without switching to Ride/Battery/Vehicle - not just a login-time summary.
+        // Recuperation sits right under the mode card: another quick switch for use while riding.
+        propertiesByName["ENERGY_RECOVERY"]?.let { property ->
+            PropertyRow(property, state.values["ENERGY_RECOVERY"], lang, profile, onSetBool, onSetNumeric, onSetString)
+        }
+
+        // Everything else worth a glance during a ride, two per row so the whole overview fits on
+        // one screen without scrolling. Each value is still also shown in its normal category tab.
         listOf(
-            "ENERGY_RECOVERY", "IS_RIDING", "CURRENT_MILEAGE", "AVERAGE_SPEED", "HIGHEST_SPEED", "RIDING_TIME",
-            "IS_LOCKED", "BLUETOOTH_CAR_SEARCH", "FAULT",
-        ).forEach { name ->
-            propertiesByName[name]?.let { property ->
-                PropertyRow(property, state.values[name], lang, profile, onSetBool, onSetNumeric, onSetString)
+            "IS_RIDING" to "IS_LOCKED",
+            "CURRENT_MILEAGE" to "RIDING_TIME",
+            "AVERAGE_SPEED" to "HIGHEST_SPEED",
+            "BLUETOOTH_CAR_SEARCH" to "FAULT",
+        ).forEach { (left, right) ->
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                for (name in listOf(left, right)) {
+                    val property = propertiesByName[name]
+                    if (property != null) {
+                        OverviewTile(property, state.values[name], lang, s, profile, onSetBool, Modifier.weight(1f))
+                    } else {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun overviewLabel(name: String, lang: Lang): String {
+    val de = lang == Lang.DE
+    return when (name) {
+        "IS_RIDING" -> if (de) "Fahrzustand" else "State"
+        "IS_LOCKED" -> if (de) "Gesperrt" else "Locked"
+        "CURRENT_MILEAGE" -> if (de) "Fahrstrecke" else "Trip"
+        "RIDING_TIME" -> if (de) "Fahrzeit" else "Ride time"
+        "AVERAGE_SPEED" -> if (de) "Ø Tempo" else "Avg speed"
+        "HIGHEST_SPEED" -> if (de) "Max. Tempo" else "Top speed"
+        "BLUETOOTH_CAR_SEARCH" -> if (de) "Suche" else "Find"
+        "FAULT" -> if (de) "Fehler" else "Fault"
+        else -> propertyName(name, lang)
+    }
+}
+
+/** Compact half-width version of [PropertyRow] for the overview - label, value and (for the lock
+ * and the find-my-scooter trigger) one control on the right. Only the few properties the overview
+ * shows need handling here; everything else stays in the full-width rows of the category tabs. */
+@Composable
+private fun OverviewTile(
+    property: SpecProperty,
+    result: SpecReadResult?,
+    lang: Lang,
+    s: AppStrings,
+    profile: SpecProfile,
+    onSetBool: (SpecProperty, Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val writeOnly = property.name in profile.writeOnly
+    val isError = !writeOnly && result != null && !result.ok
+    Card(
+        modifier = modifier.heightIn(min = 68.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().heightIn(min = 68.dp).padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    overviewLabel(property.name, lang),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (!writeOnly) {
+                    Text(
+                        displayValue(property, result, lang, s, LocalUnits.current),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            if (writeOnly) {
+                Button(onClick = { onSetBool(property, true) }, contentPadding = PaddingValues(horizontal = 12.dp)) {
+                    Text(s.triggerButton)
+                }
+            } else if (property.name == "IS_LOCKED" && result?.ok == true) {
+                Switch(checked = (result.value as? Long) == 1L, onCheckedChange = { onSetBool(property, it) })
             }
         }
     }
