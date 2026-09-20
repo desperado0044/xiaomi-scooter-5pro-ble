@@ -46,6 +46,7 @@ fun DevicePickerScreen(
     onAddDevice: () -> Unit,
     onToggleLanguage: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenDocuments: (String?) -> Unit,
 ) {
     val s = strings(state.language)
     val context = LocalContext.current
@@ -82,6 +83,10 @@ fun DevicePickerScreen(
 
         state.availableUpdate?.let { UpdateBanner(it, s, Modifier.padding(top = 8.dp)) }
 
+        if (state.knownDevices.isNotEmpty()) {
+            DocumentsTile(state.documentCounts.values.sum(), s) { onOpenDocuments(null) }
+        }
+
         if (state.knownDevices.isEmpty()) {
             Text(
                 s.noSavedDevicesText,
@@ -114,6 +119,9 @@ fun DevicePickerScreen(
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
+                                }
+                                TextButton(onClick = { onOpenDocuments(device.mac) }) {
+                                    Text("\uD83D\uDCC4 ${state.documentCounts[device.mac] ?: 0}")
                                 }
                             }
                             Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
@@ -211,5 +219,29 @@ fun DevicePickerScreen(
             },
             dismissButton = { TextButton(onClick = onDismissExportCode) { Text(s.cancelButton) } },
         )
+    }
+}
+
+/** One tap from the start screen to the documents - meant for showing them at a traffic check, so it
+ * has to work without any scooter connection. */
+@Composable
+private fun DocumentsTile(total: Int, s: AppStrings, onClick: () -> Unit) {
+    androidx.compose.material3.Card(
+        modifier = Modifier.fillMaxWidth().padding(top = 12.dp).clickable(onClick = onClick),
+        colors = androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        elevation = androidx.compose.material3.CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Row(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("\uD83D\uDCC4", fontSize = androidx.compose.ui.unit.TextUnit(28f, androidx.compose.ui.unit.TextUnitType.Sp))
+            Column(modifier = Modifier.padding(start = 12.dp)) {
+                Text(
+                    s.docsTileTitle,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+                Text(s.docsTileSubtitle(total), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            }
+        }
     }
 }

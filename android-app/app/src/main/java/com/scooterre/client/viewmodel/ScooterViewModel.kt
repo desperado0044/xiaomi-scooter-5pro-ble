@@ -3,6 +3,7 @@ package com.scooterre.client.viewmodel
 import android.app.Application
 import android.bluetooth.BluetoothManager
 import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.scooterre.client.ble.FoundDevice
@@ -15,11 +16,13 @@ import com.scooterre.client.cloud.XiaomiCloudClient
 import com.scooterre.client.protocol.BatteryHistoryStore
 import com.scooterre.client.protocol.DeviceExport
 import com.scooterre.client.protocol.DeviceRegistry
+import com.scooterre.client.protocol.DocumentStore
 import com.scooterre.client.protocol.KnownDevice
 import com.scooterre.client.protocol.MiProtocol
 import com.scooterre.client.protocol.ModeEfficiencyTotals
 import com.scooterre.client.protocol.PendingRideDelta
 import com.scooterre.client.protocol.ProtocolException
+import com.scooterre.client.protocol.ScooterDocument
 import com.scooterre.client.protocol.SecureStore
 import com.scooterre.client.protocol.SpecClient
 import com.scooterre.client.protocol.SpecProfile
@@ -48,6 +51,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.io.File
 
 // Deliberately left blank rather than pre-filled with a real device's MAC - this is a public
 // build meant for anyone's own scooter, not just the one it was originally developed against.
@@ -81,7 +85,7 @@ private val RIDE_PRIORITY_PROPERTIES = setOf(
 /** Pause between full property sweeps while parked (a sweep itself takes ~9s on top). */
 enum class RefreshRate(val idleDelayMs: Long) { ECONOMY(30_000L), NORMAL(10_000L), FAST(3_000L) }
 
-enum class Screen { LOGIN, DASHBOARD, DEVICE_PICKER, APP_SETTINGS }
+enum class Screen { LOGIN, DASHBOARD, DEVICE_PICKER, APP_SETTINGS, DOCUMENTS, DOCUMENT_VIEWER }
 
 data class UiState(
     val screen: Screen = Screen.LOGIN,
@@ -96,6 +100,12 @@ data class UiState(
     val rideTracking: Boolean = true,
     val updateCheck: Boolean = true,
     val availableUpdate: UpdateInfo? = null,
+    // Documents: which scooter's list is open, its documents, the one shown full screen, and the
+    // per-scooter counts shown on the device list.
+    val documentsMac: String? = null,
+    val documents: List<ScooterDocument> = emptyList(),
+    val viewerDocId: String? = null,
+    val documentCounts: Map<String, Int> = emptyMap(),
     val macAddress: String = DEFAULT_SCOOTER_MAC,
     // Preferably the name from the Xiaomi cloud account (finishCloudLogin), falling back to the
     // BLE-advertised name if picked from a scan, or null for a generic label in the dashboard.
@@ -148,6 +158,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     private val prefs = application.getSharedPreferences("scooter_prefs", Context.MODE_PRIVATE)
     private val deviceRegistry = DeviceRegistry(application)
     private val batteryHistoryStore = BatteryHistoryStore(application)
+    private val documentStore = DocumentStore(application)
     private var protocol: MiProtocol? = null
 
     // Kept around across the "PIN required" round-trip so retryWithPin() doesn't have to repeat
@@ -175,6 +186,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
                 confirmCritical = prefs.getBoolean(KEY_CONFIRM_CRITICAL, false),
                 rideTracking = prefs.getBoolean(KEY_RIDE_TRACKING, true),
                 updateCheck = prefs.getBoolean(KEY_UPDATE_CHECK, true),
+                documentCounts = known.associate { it.mac to documentStore.count(it.mac) },
                 availableUpdate = if (prefs.getBoolean(KEY_UPDATE_CHECK, true)) storedUpdate() else null,
                 knownDevices = known,
             )
@@ -186,18 +198,97 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         _state.update { it.copy(hasSavedLtmk = secureStore.loadLtmk(it.macAddress) != null) }
     }
 
-    private var screenBeforeSettings = Screen.DEVICE_PICKER
+    // Screens that are opened on top of the current one (settings, documents) remember where to
+    // return to; the connect/disconnect flows set their screens directly and clear this.
+    private val screenStack = ArrayDeque<Screen>()
 
-    /** App settings work without a connected scooter - opened from the device list (or login). */
-    fun openAppSettings() {
+    private fun pushScreen(target: Screen) {
         val current = _state.value.screen
-        if (current == Screen.APP_SETTINGS) return
-        screenBeforeSettings = current
-        _state.update { it.copy(screen = Screen.APP_SETTINGS) }
+        if (current == target) return
+        screenStack.addLast(current)
+        _state.update { it.copy(screen = target) }
     }
 
-    fun closeAppSettings() {
-        _state.update { it.copy(screen = screenBeforeSettings) }
+    fun navigateBack() {
+        val previous = screenStack.removeLastOrNull() ?: Screen.DEVICE_PICKER
+        _state.update { it.copy(screen = previous) }
+    }
+
+    /** App settings work without a connected scooter - opened from the device list (or login). */
+    fun openAppSettings() = pushScreen(Screen.APP_SETTINGS)
+
+    fun closeAppSettings() = navigateBack()
+
+    private fun refreshDocuments() {
+        val mac = _state.value.documentsMac
+        _state.update { st ->
+            st.copy(
+                documents = mac?.let(documentStore::list) ?: emptyList(),
+                documentCounts = deviceRegistry.list().associate { it.mac to documentStore.count(it.mac) },
+            )
+        }
+    }
+
+    /** Opens the documents of [mac] - or, with null, of the scooter used last (else the first one). */
+    fun openDocuments(mac: String?) {
+        val known = deviceRegistry.list()
+        val target = mac
+            ?: prefs.getString(KEY_LAST_CONNECTED, null)?.takeIf { last -> known.any { it.mac.equals(last, ignoreCase = true) } }
+            ?: known.firstOrNull()?.mac
+            ?: return
+        _state.update { it.copy(documentsMac = target, error = null) }
+        refreshDocuments()
+        pushScreen(Screen.DOCUMENTS)
+    }
+
+    fun selectDocumentsDevice(mac: String) {
+        _state.update { it.copy(documentsMac = mac, error = null) }
+        refreshDocuments()
+    }
+
+    fun openDocument(id: String) {
+        _state.update { it.copy(viewerDocId = id) }
+        pushScreen(Screen.DOCUMENT_VIEWER)
+    }
+
+    /** The first photo becomes the document, the rest are appended as further pages. */
+    fun addDocumentPhotos(files: List<File>, name: String) = documentJob { mac ->
+        val first = files.firstOrNull() ?: return@documentJob
+        val doc = documentStore.addImage(mac, name) { first.inputStream() }
+        files.drop(1).forEach { f -> documentStore.appendImage(mac, doc.id) { f.inputStream() } }
+        files.forEach { it.delete() }
+    }
+
+    fun addDocumentFromUri(uri: Uri, name: String) = documentJob { mac ->
+        val resolver = getApplication<Application>().contentResolver
+        if (resolver.getType(uri) == "application/pdf") {
+            documentStore.addPdf(mac, name) { resolver.openInputStream(uri) }
+        } else {
+            documentStore.addImage(mac, name) { resolver.openInputStream(uri) }
+        }
+    }
+
+    fun appendDocumentPhoto(docId: String, file: File) = documentJob { mac ->
+        documentStore.appendImage(mac, docId) { file.inputStream() }
+        file.delete()
+    }
+
+    fun renameDocument(docId: String, name: String) = documentJob { mac -> documentStore.rename(mac, docId, name) }
+
+    fun deleteDocument(docId: String) = documentJob { mac -> documentStore.delete(mac, docId) }
+
+    private fun documentJob(block: (String) -> Unit) {
+        val mac = _state.value.documentsMac ?: return
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { block(mac) }
+                _state.update { it.copy(error = null) }
+            } catch (e: Exception) {
+                android.util.Log.e("ScooterVM", "document operation failed", e)
+                _state.update { it.copy(error = s.docsImportError) }
+            }
+            refreshDocuments()
+        }
     }
 
     fun setThemeMode(mode: ThemeMode) {
@@ -562,6 +653,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
             val model = _state.value.activeModel
             deviceRegistry.upsert(KnownDevice(mac = mac, model = model, name = _state.value.deviceName))
             prefs.edit().putString(KEY_LAST_CONNECTED, mac).apply()
+            screenStack.clear()
             _state.update {
                 it.copy(
                     screen = Screen.DASHBOARD, error = null,
@@ -635,6 +727,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         stopAutoRefresh()
         protocol?.dispose()
         protocol = null
+        screenStack.clear()
         val known = deviceRegistry.list()
         _state.update {
             it.copy(

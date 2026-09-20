@@ -30,7 +30,7 @@ fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
     }
 
     val systemDark = isSystemInDarkTheme()
-    AmbientBrightnessEffect(state.autoBrightness)
+    AmbientBrightnessEffect(state.autoBrightness, forceMax = state.screen == Screen.DOCUMENT_VIEWER)
     val dark = when (state.themeMode) {
         ThemeMode.SYSTEM -> systemDark
         ThemeMode.LIGHT -> false
@@ -46,7 +46,7 @@ fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
     // The dashboard only exists while connected: keep the display on there. keepScreenOn only
     // holds while the window is visible, so the screen may still sleep once the app is in the
     // background.
-    val keepScreenOn = state.screen == Screen.DASHBOARD && state.keepScreenOn
+    val keepScreenOn = (state.screen == Screen.DASHBOARD && state.keepScreenOn) || state.screen == Screen.DOCUMENT_VIEWER
     DisposableEffect(keepScreenOn) {
         view.keepScreenOn = keepScreenOn
         onDispose { view.keepScreenOn = false }
@@ -58,6 +58,7 @@ fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
     BackHandler(enabled = state.screen == Screen.DASHBOARD) { viewModel.disconnect() }
     BackHandler(enabled = state.screen == Screen.LOGIN && state.knownDevices.isNotEmpty()) { viewModel.openDevicePicker() }
     BackHandler(enabled = state.screen == Screen.APP_SETTINGS) { viewModel.closeAppSettings() }
+    BackHandler(enabled = state.screen == Screen.DOCUMENTS || state.screen == Screen.DOCUMENT_VIEWER) { viewModel.navigateBack() }
 
     val settingsActions = SettingsActions(
         onSetLanguage = viewModel::setLanguage,
@@ -70,6 +71,16 @@ fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
         onSetConfirmCritical = viewModel::setConfirmCritical,
         onSetRideTracking = viewModel::setRideTracking,
         onSetUpdateCheck = viewModel::setUpdateCheck,
+    )
+
+    val documentActions = DocumentActions(
+        onSelectDevice = viewModel::selectDocumentsDevice,
+        onOpen = viewModel::openDocument,
+        onAddPhotos = viewModel::addDocumentPhotos,
+        onImport = viewModel::addDocumentFromUri,
+        onAppendPhoto = viewModel::appendDocumentPhoto,
+        onRename = viewModel::renameDocument,
+        onDelete = viewModel::deleteDocument,
     )
 
     CompositionLocalProvider(LocalUnits provides state.units) {
@@ -115,12 +126,15 @@ fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
                         onAddDevice = viewModel::startAddDevice,
                         onToggleLanguage = viewModel::toggleLanguage,
                         onOpenSettings = viewModel::openAppSettings,
+                        onOpenDocuments = viewModel::openDocuments,
                     )
                     Screen.APP_SETTINGS -> AppSettingsScreen(
                         state = state,
                         settings = settingsActions,
                         onBack = viewModel::closeAppSettings,
                     )
+                    Screen.DOCUMENTS -> DocumentsScreen(state, documentActions, viewModel::navigateBack)
+                    Screen.DOCUMENT_VIEWER -> DocumentViewerScreen(state, documentActions, viewModel::navigateBack)
                 }
             }
         }

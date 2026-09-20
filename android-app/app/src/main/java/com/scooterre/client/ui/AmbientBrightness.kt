@@ -13,6 +13,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.log10
@@ -45,18 +46,32 @@ private fun brightnessForLogLux(x: Double): Float {
  * its own 100 ms clock instead of per sensor event - otherwise a stable reading would leave the
  * screen stuck part-way between the old and the new brightness. */
 @Composable
-fun AmbientBrightnessEffect(enabled: Boolean) {
+fun AmbientBrightnessEffect(enabled: Boolean, forceMax: Boolean = false) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    LaunchedEffect(enabled, lifecycle) {
-        val window = (context as? Activity)?.window
-        val manager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        val sensor = manager.getDefaultSensor(Sensor.TYPE_LIGHT)
-        if (!enabled || window == null || sensor == null) return@LaunchedEffect
+    LaunchedEffect(enabled, forceMax, lifecycle) {
+        val window = (context as? Activity)?.window ?: return@LaunchedEffect
 
         fun apply(value: Float) {
             window.attributes = window.attributes.also { it.screenBrightness = value }
         }
+
+        // The document viewer wants full brightness whatever else is configured.
+        if (forceMax) {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                apply(1f)
+                try {
+                    awaitCancellation()
+                } finally {
+                    apply(WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE)
+                }
+            }
+            return@LaunchedEffect
+        }
+
+        val manager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        val sensor = manager.getDefaultSensor(Sensor.TYPE_LIGHT)
+        if (!enabled || sensor == null) return@LaunchedEffect
 
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             var latestLogLux: Double? = null
