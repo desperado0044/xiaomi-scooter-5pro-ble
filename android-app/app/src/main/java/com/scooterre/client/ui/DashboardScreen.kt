@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -600,21 +601,17 @@ private fun PropertyRow(
                                 )
                             }
                         }
-                        // TIRE_MAINTENANCE is the only STRING-settable property so far - a
-                        // packed "[state 1][interval 3][remaining-days 3]" string (see
-                        // formatTireMaintenance) where only the state digit is user-facing;
-                        // interval/remaining are left untouched on toggle. Confirmed settable
-                        // 2026-09-20 (status=0 on a live probe) after the user noticed Xiaomi
-                        // Home lets you toggle this reminder - state semantics ('2'=off,
-                        // otherwise on) were already known from the reference plugin, not
-                        // guessed here.
+                        // TIRE_MAINTENANCE is read as "[state 1][interval 3][remaining-days 3]" but
+                        // WRITTEN as the 4-char "[state 1][interval 3]" - the same format Xiaomi
+                        // Home writes, confirmed live 2026-09-20 (state flips, interval changes and
+                        // resets the remaining days to it). State '2' = off, '0' = on.
                         SpecType.STRING -> if (property.name == "TIRE_MAINTENANCE") {
                             val raw = result.value as? String
                             if (raw != null && raw.length >= 7 && raw.all { it.isDigit() }) {
                                 Switch(
                                     checked = raw[0] != '2',
                                     onCheckedChange = { turningOn ->
-                                        onSetString(property, (if (turningOn) "0" else "2") + raw.substring(1))
+                                        onSetString(property, (if (turningOn) "0" else "2") + raw.substring(1, 4))
                                     },
                                 )
                             }
@@ -632,6 +629,24 @@ private fun PropertyRow(
                     onSelect = { onSetNumeric(property, it) },
                     modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
                 )
+            }
+
+            if (settable && property.name == "TIRE_MAINTENANCE" && result?.ok == true) {
+                val raw = result.value as? String
+                if (raw != null && raw.length >= 7 && raw.all { it.isDigit() } && raw[0] != '2') {
+                    Text(
+                        s.tireIntervalLabel,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 10.dp),
+                    )
+                    IntervalButtons(
+                        options = TIRE_INTERVAL_DAYS,
+                        current = raw.substring(1, 4).toInt(),
+                        onSelect = { days -> onSetString(property, "0" + "%03d".format(days)) },
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    )
+                }
             }
         }
     }
@@ -669,6 +684,30 @@ private fun CycleButtons(
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.outlinedButtonColors(),
                 ) { Text(label) }
+            }
+        }
+    }
+}
+
+private val TIRE_INTERVAL_DAYS = listOf(14, 30, 60, 90, 180)
+
+@Composable
+private fun IntervalButtons(options: List<Int>, current: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
+    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Five buttons share one row, so drop the default 24dp horizontal padding or the digits wrap.
+        val tight = PaddingValues(horizontal = 4.dp)
+        for (days in options) {
+            if (days == current) {
+                Button(onClick = {}, enabled = false, modifier = Modifier.weight(1f), contentPadding = tight) {
+                    Text(days.toString(), maxLines = 1, softWrap = false)
+                }
+            } else {
+                Button(
+                    onClick = { onSelect(days) },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.outlinedButtonColors(),
+                    contentPadding = tight,
+                ) { Text(days.toString(), maxLines = 1, softWrap = false) }
             }
         }
     }

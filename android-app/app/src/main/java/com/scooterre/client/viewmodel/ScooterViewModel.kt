@@ -627,6 +627,10 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     fun setStringProperty(property: SpecProperty, value: String) = launchBusy(null) {
         val spec = protocol?.requireSpecClient() ?: return@launchBusy
         val status = withContext(Dispatchers.IO) { spec.set(property, value.toByteArray(Charsets.US_ASCII)) }
+        // The scooter keeps answering GET with the old string for a moment after a SET (seen live
+        // on TIRE_MAINTENANCE: an immediate read-back flipped the switch back until the next
+        // refresh); the notebook probe only got the new value after waiting ~1s.
+        delay(1_000L)
         refreshOneNow(spec, property)
         if (status != 0) throw ProtocolException(s.setRejectedError(propertyName(property.name, _state.value.language), status))
     }
