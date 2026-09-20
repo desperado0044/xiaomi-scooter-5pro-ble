@@ -183,8 +183,10 @@ Wiederholungsversuch bei kurzzeitigen Verbindungsproblemen.
 4. Dokumente: Kachel „Dokumente" → Scannen, Fotos oder Datei.
 5. Zweites Handy (z.B. Familie): am ersten Handy „Exportieren", Datei teilen, am zweiten
    „Scooter hinzufügen" → „Datei auswählen".
-6. Neues Handy: in den App-Einstellungen unter „Sicherung" eine Sicherung erstellen (Passwort gut
-   merken), die Datei aufs neue Handy übertragen und dort „Wiederherstellen" wählen.
+6. Neues Handy: am alten Handy in den App-Einstellungen (⚙️) unter „Sicherung" eine Sicherung erstellen
+   (Passwort gut merken) und die Datei aufs neue Handy übertragen. Dort die App installieren und schon auf
+   der leeren Startseite „Scooter hinzufügen" über ⚙️ → Sicherung → „Wiederherstellen" wählen — ein
+   Cloud-Login ist nicht nötig.
 
 ### Lizenz
 
@@ -392,8 +394,9 @@ transient connection issues.
 4. Documents: "Documents" tile → Scan, Photos or File.
 5. Second phone (e.g. family): on the first phone "Export", share the file, on the second
    "Add scooter" → "Choose file".
-6. New phone: in the app settings under "Backup" create a backup (remember the password), move the
-   file to the new phone and choose "Restore" there.
+6. New phone: on the old phone create a backup in the app settings (⚙️) under "Backup" (remember the
+   password) and move the file to the new phone. Install the app there and, already on the empty
+   "Add scooter" start screen, choose ⚙️ → Backup → "Restore" — no cloud login needed.
 
 ### License
 

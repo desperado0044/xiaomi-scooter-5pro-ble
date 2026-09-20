@@ -137,6 +137,7 @@ fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
                         onRetryWithPin = viewModel::retryWithPin,
                         onForgetSaved = viewModel::forgetSavedLtmk,
                         onToggleLanguage = viewModel::toggleLanguage,
+                        onOpenSettings = viewModel::openAppSettings,
                         onBackToPicker = viewModel::openDevicePicker,
                         onImportTextChanged = viewModel::onImportTextChanged,
                         onImportDevice = viewModel::importDevice,

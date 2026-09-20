@@ -223,7 +223,11 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
 
     fun navigateBack() {
         val previous = screenStack.removeLastOrNull() ?: Screen.DEVICE_PICKER
-        _state.update { it.copy(screen = previous) }
+        // Settings opened from the empty first-run login screen (to restore a backup) must not
+        // return there once scooters exist.
+        _state.update {
+            it.copy(screen = if (previous == Screen.LOGIN && it.knownDevices.isNotEmpty()) Screen.DEVICE_PICKER else previous)
+        }
     }
 
     /** App settings work without a connected scooter - opened from the device list (or login). */

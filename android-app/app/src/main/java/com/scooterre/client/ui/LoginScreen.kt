@@ -56,6 +56,7 @@ fun LoginScreen(
     onRetryWithPin: () -> Unit,
     onForgetSaved: () -> Unit,
     onToggleLanguage: () -> Unit,
+    onOpenSettings: () -> Unit,
     onBackToPicker: () -> Unit,
     onImportTextChanged: (String) -> Unit,
     onImportDevice: () -> Unit,
@@ -116,7 +117,11 @@ fun LoginScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(s.addDeviceTitle, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
-            TextButton(onClick = onToggleLanguage) { Text(if (state.language == Lang.DE) "🇩🇪" else "🇬🇧") }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // A fresh install has no scooter yet - the settings hold "Restore backup" for that case.
+                TextButton(onClick = onOpenSettings) { Text("⚙️") }
+                TextButton(onClick = onToggleLanguage) { Text(if (state.language == Lang.DE) "🇩🇪" else "🇬🇧") }
+            }
         }
         if (state.knownDevices.isNotEmpty()) {
             TextButton(onClick = onBackToPicker) { Text(s.backToDeviceListButton) }
