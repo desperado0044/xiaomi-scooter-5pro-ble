@@ -5,6 +5,14 @@ package com.scooterre.client.ui
  * [strings], [propertyName], [enumLabel] and [cycleLabel] below. */
 enum class Lang { DE, EN }
 
+/** The language to use: the saved choice if there is one, otherwise German on a German-language
+ * device and English everywhere else (English is the project's first language). */
+fun resolveLang(stored: String?, systemLanguage: String = java.util.Locale.getDefault().language): Lang = when (stored) {
+    "DE" -> Lang.DE
+    "EN" -> Lang.EN
+    else -> if (systemLanguage == "de") Lang.DE else Lang.EN
+}
+
 /** All static chrome text (buttons, labels, dialogs, status messages) for one language. Kept as
  * a single data class instead of string resources so a language switch is a plain in-memory
  * state change, no Activity recreation needed. */

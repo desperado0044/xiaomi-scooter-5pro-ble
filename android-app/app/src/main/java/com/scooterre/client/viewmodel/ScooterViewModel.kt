@@ -34,6 +34,7 @@ import com.scooterre.client.protocol.SpecReadResult
 import com.scooterre.client.protocol.SpecType
 import com.scooterre.client.protocol.encodeValue
 import com.scooterre.client.ui.Lang
+import com.scooterre.client.ui.resolveLang
 import com.scooterre.client.ui.ThemeMode
 import com.scooterre.client.ui.UnitSystem
 import com.scooterre.client.ui.distance
@@ -92,7 +93,7 @@ enum class Screen { LOGIN, DASHBOARD, DEVICE_PICKER, APP_SETTINGS, DOCUMENTS, DO
 
 data class UiState(
     val screen: Screen = Screen.LOGIN,
-    val language: Lang = Lang.DE,
+    val language: Lang = resolveLang(null),
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val keepScreenOn: Boolean = true,
     val autoBrightness: Boolean = false,
@@ -184,7 +185,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
                 // behavior for exactly one saved device (the picker just becomes a 1-item list).
                 screen = if (known.isNotEmpty()) Screen.DEVICE_PICKER else Screen.LOGIN,
                 macAddress = prefs.getString(KEY_LAST_MAC, DEFAULT_SCOOTER_MAC) ?: DEFAULT_SCOOTER_MAC,
-                language = if (prefs.getString(KEY_LANG, "DE") == "EN") Lang.EN else Lang.DE,
+                language = resolveLang(prefs.getString(KEY_LANG, null)),
                 themeMode = runCatching { ThemeMode.valueOf(prefs.getString(KEY_THEME_MODE, null) ?: "SYSTEM") }
                     .getOrDefault(ThemeMode.SYSTEM),
                 keepScreenOn = prefs.getBoolean(KEY_KEEP_SCREEN_ON, true),
@@ -446,7 +447,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     private fun reloadSettings() {
         _state.update {
             it.copy(
-                language = if (prefs.getString(KEY_LANG, "DE") == "EN") Lang.EN else Lang.DE,
+                language = resolveLang(prefs.getString(KEY_LANG, null)),
                 themeMode = runCatching { ThemeMode.valueOf(prefs.getString(KEY_THEME_MODE, null) ?: "SYSTEM") }.getOrDefault(ThemeMode.SYSTEM),
                 keepScreenOn = prefs.getBoolean(KEY_KEEP_SCREEN_ON, true),
                 autoBrightness = prefs.getBoolean(KEY_AUTO_BRIGHTNESS, false),

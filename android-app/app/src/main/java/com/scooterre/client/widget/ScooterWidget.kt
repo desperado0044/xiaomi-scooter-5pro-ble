@@ -82,7 +82,7 @@ class ScooterWidget : GlanceAppWidget() {
                 remainingKm = prefs[KEY_REMAINING_KM],
                 distanceUnit = prefs[KEY_DISTANCE_UNIT] ?: "km",
                 timestampMillis = prefs[KEY_TIMESTAMP] ?: 0L,
-                lang = prefs[KEY_LANG] ?: "DE",
+                lang = com.scooterre.client.ui.resolveLang(prefs[KEY_LANG]).name,
             )
         }
     }
