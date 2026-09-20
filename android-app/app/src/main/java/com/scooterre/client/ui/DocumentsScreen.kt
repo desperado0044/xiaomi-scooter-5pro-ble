@@ -11,6 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -125,6 +126,14 @@ fun DocumentsScreen(state: UiState, actions: DocumentActions, onBack: () -> Unit
         pendingPhotos = pendingPhotos + uris.map { it.toString() }
         nameDialogOpen = true
     }
+    // Photos that already exist (e.g. scanned earlier in the camera app): straight to the photo
+    // picker, several at once become the pages of one document.
+    val pickPhotos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(20)) { uris ->
+        if (uris.isNotEmpty()) {
+            pendingPhotos = pendingPhotos + uris.map { it.toString() }
+            nameDialogOpen = true
+        }
+    }
     val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             val displayName = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
@@ -170,11 +179,19 @@ fun DocumentsScreen(state: UiState, actions: DocumentActions, onBack: () -> Unit
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
-            Button(onClick = { takePhoto() }, modifier = Modifier.weight(1f)) { Text("📷  ${s.docsScan}") }
+            Button(onClick = { takePhoto() }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 8.dp)) {
+                Text("📷 ${s.docsScan}", maxLines = 1)
+            }
+            OutlinedButton(
+                onClick = { pickPhotos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(horizontal = 8.dp),
+            ) { Text("🖼 ${s.docsFromPhotos}", maxLines = 1) }
             OutlinedButton(
                 onClick = { pickFile.launch(arrayOf("image/*", "application/pdf")) },
                 modifier = Modifier.weight(1f),
-            ) { Text("📁  ${s.docsImport}") }
+                contentPadding = PaddingValues(horizontal = 8.dp),
+            ) { Text("📁 ${s.docsImport}", maxLines = 1) }
         }
 
         Text(
