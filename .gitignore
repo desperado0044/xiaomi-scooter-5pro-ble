@@ -19,3 +19,8 @@ android-app/**/.cxx/
 **/secrets/
 **/*.hex
 **/ltmk*
+
+# Signing material (the real key lives in ~/.scooter-signing, outside the repo)
+**/*.p12
+**/*.jks
+**/keystore.properties

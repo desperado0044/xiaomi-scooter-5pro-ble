@@ -170,8 +170,12 @@ Wiederholungsversuch bei kurzzeitigen Verbindungsproblemen.
 ### Erste Schritte
 
 1. APK aus den [Releases](https://github.com/desperado0044/xiaomi-scooter-5pro-ble/releases)
-   laden und installieren (Sideload, „unbekannte Quellen" erlauben; es ist eine Debug-signierte
-   APK, kein Play-Store-Release). Bluetooth-Berechtigung erlauben.
+   laden und installieren (Sideload, „unbekannte Quellen" erlauben; kein Play-Store-Release).
+   Bluetooth-Berechtigung erlauben. Ab Version 2.2 ist die APK mit einem eigenen Release-Schlüssel
+   signiert (Zertifikat-SHA-256 siehe „Bauen"). **Umstieg von 2.1 oder älter:** Diese Versionen waren
+   Debug-signiert, Android lässt das Update deshalb nicht über die alte App zu — einmal in den
+   App-Einstellungen eine Sicherung erstellen, die alte App deinstallieren, die neue installieren und
+   die Sicherung wiederherstellen. Danach laufen Updates normal.
 2. „Scooter hinzufügen": Cloud-Login (QR-Code oder Passwort), bei gesetzter Sharing-PIN die
    Geräte-PIN eingeben — die App holt den Schlüssel einmalig ab. Alternativ eine Exportdatei bzw.
    einen Code importieren.
@@ -213,6 +217,12 @@ cd android-app
 
 APK liegt danach unter `android-app/app/build/outputs/apk/debug/`. Benötigt: Android SDK,
 minSdk 26 (Android 8.0), getestet auf Android 15/16 sowie (nur BLE-Verbindungsprüfung) Android 9.
+
+Die Release-Builds (`./gradlew assembleRelease`) werden mit einem Schlüssel aus
+`~/.scooter-signing/keystore.properties` signiert (`storeFile`, `storePassword`, `keyAlias`,
+`keyPassword`); ohne diese Datei bleibt die Release-APK unsigniert, Debug-Builds sind nicht betroffen.
+Zertifikat-SHA-256 der offiziellen Releases ab 2.2:
+`BE:42:25:12:15:B5:39:17:90:10:D7:7D:9A:FE:DD:52:AD:F9:43:E6:35:27:AC:0F:79:39:B9:D5:6E:13:BC:9F`
 
 ---
 
@@ -371,8 +381,11 @@ transient connection issues.
 ### Getting started
 
 1. Download the APK from the [Releases](https://github.com/desperado0044/xiaomi-scooter-5pro-ble/releases)
-   and install it (sideload, allow "unknown sources"; it is a debug-signed APK, not a Play Store
-   release). Allow the Bluetooth permission.
+   and install it (sideload, allow "unknown sources"; not a Play Store release). Allow the Bluetooth
+   permission. From version 2.2 on the APK is signed with a dedicated release key (certificate SHA-256
+   see "Building"). **Switching from 2.1 or older:** those versions were debug-signed, so Android will
+   not accept the update over the old app — create a backup once in the app settings, uninstall the
+   old app, install the new one and restore the backup. Updates work normally after that.
 2. "Add scooter": cloud login (QR code or password); if a sharing PIN is set, enter the device PIN
    — the app fetches the key once. Alternatively import an export file or code.
 3. Tap the scooter in the device list — the overview opens.
@@ -413,3 +426,9 @@ cd android-app
 
 The APK lands under `android-app/app/build/outputs/apk/debug/`. Requires the Android SDK,
 minSdk 26 (Android 8.0); tested on Android 15/16, plus (BLE connectivity check only) Android 9.
+
+Release builds (`./gradlew assembleRelease`) are signed with a key read from
+`~/.scooter-signing/keystore.properties` (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`);
+without that file the release APK stays unsigned, debug builds are unaffected. Certificate SHA-256
+of the official releases from 2.2 on:
+`BE:42:25:12:15:B5:39:17:90:10:D7:7D:9A:FE:DD:52:AD:F9:43:E6:35:27:AC:0F:79:39:B9:D5:6E:13:BC:9F`
