@@ -13,6 +13,7 @@ import com.scooterre.client.cloud.CloudException
 import com.scooterre.client.cloud.PinRequiredException
 import com.scooterre.client.cloud.QrLoginStart
 import com.scooterre.client.cloud.XiaomiCloudClient
+import com.scooterre.client.protocol.BackupBundle
 import com.scooterre.client.protocol.BatteryHistoryStore
 import com.scooterre.client.protocol.DeviceBundle
 import com.scooterre.client.protocol.DeviceExport
@@ -69,6 +70,7 @@ private const val KEY_CONFIRM_CRITICAL = "confirm_critical"
 private const val KEY_RIDE_TRACKING = "ride_tracking"
 private const val KEY_UPDATE_CHECK = "update_check"
 private const val KEY_APP_LOCK = "app_lock"
+private const val KEY_LAST_BACKUP = "last_backup_millis"
 private const val KEY_UPDATE_LAST_CHECK = "update_last_check"
 private const val KEY_UPDATE_TAG = "update_latest_tag"
 private const val KEY_UPDATE_URL = "update_latest_url"
@@ -103,6 +105,8 @@ data class UiState(
     // App lock (opt-in, default off): asks for fingerprint/PIN once per app start.
     val appLock: Boolean = false,
     val locked: Boolean = false,
+    val lastBackupMillis: Long = 0L,
+    val backupMessage: String? = null,
     val availableUpdate: UpdateInfo? = null,
     // Documents: which scooter's list is open, its documents, the one shown full screen, and the
     // per-scooter counts shown on the device list.
@@ -193,6 +197,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
                 updateCheck = prefs.getBoolean(KEY_UPDATE_CHECK, true),
                 appLock = prefs.getBoolean(KEY_APP_LOCK, false),
                 locked = prefs.getBoolean(KEY_APP_LOCK, false),
+                lastBackupMillis = prefs.getLong(KEY_LAST_BACKUP, 0L),
                 documentCounts = known.associate { it.mac to documentStore.count(it.mac) },
                 availableUpdate = if (prefs.getBoolean(KEY_UPDATE_CHECK, true)) storedUpdate() else null,
                 knownDevices = known,
@@ -403,6 +408,52 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     fun setAppLock(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_APP_LOCK, enabled).apply()
         _state.update { it.copy(appLock = enabled) }
+    }
+
+    fun markBackupDone() {
+        val now = System.currentTimeMillis()
+        prefs.edit().putLong(KEY_LAST_BACKUP, now).apply()
+        _state.update { it.copy(lastBackupMillis = now) }
+    }
+
+    fun dismissBackupMessage() = _state.update { it.copy(backupMessage = null) }
+
+    /** Restores a full backup file; [withSettings] also re-applies the app settings stored in it. */
+    fun restoreBackup(uri: Uri, password: String, withSettings: Boolean) {
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { getApplication<Application>().contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
+                    ?.let { BackupBundle.restore(getApplication(), it, password, withSettings) }
+            }
+            when (result) {
+                is BackupBundle.RestoreResult.Ok -> {
+                    reloadSettings()
+                    _state.update { it.copy(knownDevices = deviceRegistry.list()) }
+                    refreshDocuments()
+                    _state.update { it.copy(backupMessage = s.backupDone(result.devices, result.documents)) }
+                }
+                BackupBundle.RestoreResult.BadPassword -> _state.update { it.copy(backupMessage = s.importWrongPasswordError) }
+                BackupBundle.RestoreResult.TooLarge -> _state.update { it.copy(backupMessage = s.backupTooLarge) }
+                else -> _state.update { it.copy(backupMessage = s.importInvalidCodeError) }
+            }
+        }
+    }
+
+    private fun reloadSettings() {
+        _state.update {
+            it.copy(
+                language = if (prefs.getString(KEY_LANG, "DE") == "EN") Lang.EN else Lang.DE,
+                themeMode = runCatching { ThemeMode.valueOf(prefs.getString(KEY_THEME_MODE, null) ?: "SYSTEM") }.getOrDefault(ThemeMode.SYSTEM),
+                keepScreenOn = prefs.getBoolean(KEY_KEEP_SCREEN_ON, true),
+                autoBrightness = prefs.getBoolean(KEY_AUTO_BRIGHTNESS, false),
+                units = runCatching { UnitSystem.valueOf(prefs.getString(KEY_UNITS, null) ?: "METRIC") }.getOrDefault(UnitSystem.METRIC),
+                autoConnect = prefs.getBoolean(KEY_AUTO_CONNECT, false),
+                refreshRate = runCatching { RefreshRate.valueOf(prefs.getString(KEY_REFRESH_RATE, null) ?: "NORMAL") }.getOrDefault(RefreshRate.NORMAL),
+                confirmCritical = prefs.getBoolean(KEY_CONFIRM_CRITICAL, false),
+                rideTracking = prefs.getBoolean(KEY_RIDE_TRACKING, true),
+                updateCheck = prefs.getBoolean(KEY_UPDATE_CHECK, true),
+            )
+        }
     }
 
     fun setKeepScreenOn(enabled: Boolean) {
