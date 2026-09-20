@@ -78,7 +78,7 @@ fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
         onOpen = viewModel::openDocument,
         onAddPhotos = viewModel::addDocumentPhotos,
         onImport = viewModel::addDocumentFromUri,
-        onAppendPhoto = viewModel::appendDocumentPhoto,
+        onAppendPhotos = viewModel::appendDocumentPhotos,
         onRename = viewModel::renameDocument,
         onDelete = viewModel::deleteDocument,
     )

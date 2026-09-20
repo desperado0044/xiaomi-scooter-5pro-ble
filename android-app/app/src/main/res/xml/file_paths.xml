@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<paths>
-    <!-- Target files for the camera app when photographing a document; copied into the
-         app-private document store right afterwards. -->
-    <cache-path name="camera" path="camera/" />
-</paths>

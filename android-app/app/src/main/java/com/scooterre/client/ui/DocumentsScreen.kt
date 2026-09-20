@@ -1,8 +1,12 @@
 package com.scooterre.client.ui
 
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,51 +31,77 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.FileProvider
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.scooterre.client.protocol.ScooterDocument
 import com.scooterre.client.viewmodel.UiState
-import java.io.File
 
 /** What the document screens can ask the ViewModel to do. */
 data class DocumentActions(
     val onSelectDevice: (String) -> Unit,
     val onOpen: (String) -> Unit,
-    val onAddPhotos: (List<File>, String) -> Unit,
+    val onAddPhotos: (List<Uri>, String) -> Unit,
     val onImport: (Uri, String) -> Unit,
-    val onAppendPhoto: (String, File) -> Unit,
+    val onAppendPhotos: (String, List<Uri>) -> Unit,
     val onRename: (String, String) -> Unit,
     val onDelete: (String) -> Unit,
 )
 
-/** Returns a function that starts the phone's camera app for one photo and hands the resulting file
- * to [onPhoto]. The target file lives in the cache dir behind a FileProvider URI, so neither a
- * camera nor a storage permission is needed. The pending path is saved across process death (the
- * camera app can push this app out of memory). */
+/** Returns a function that opens the phone's own camera app (normal mode, so e.g. its document
+ * scanner can be chosen there) and, once the user comes back to this app, opens the system photo
+ * picker so the new shots can be picked - several at once for a multi-page document. The photo
+ * picker needs no storage permission. The shots stay in the phone's gallery. */
 @Composable
-fun rememberCameraLauncher(onPhoto: (File) -> Unit): () -> Unit {
+fun rememberScanLauncher(onPhotos: (List<Uri>) -> Unit): () -> Unit {
     val context = LocalContext.current
-    var pendingPath by rememberSaveable { mutableStateOf<String?>(null) }
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
-        val file = pendingPath?.let { File(it) }
-        pendingPath = null
-        if (ok && file != null && file.exists()) onPhoto(file) else file?.delete()
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    var awaitingReturn by rememberSaveable { mutableStateOf(false) }
+    val awaiting by rememberUpdatedState(awaitingReturn)
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(20)) { uris ->
+        if (uris.isNotEmpty()) onPhotos(uris)
+    }
+    // Only the ON_RESUME that follows a real trip to the camera counts - an observer added while the
+    // app is already resumed is told about ON_RESUME immediately, which must not open the picker.
+    val trip = remember { booleanArrayOf(false) }
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> if (awaiting) trip[0] = true
+                Lifecycle.Event.ON_RESUME -> if (awaiting && trip[0]) {
+                    trip[0] = false
+                    awaitingReturn = false
+                    picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                }
+                else -> {}
+            }
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
     }
     return {
-        val dir = File(context.cacheDir, "camera").apply { mkdirs() }
-        val file = File(dir, "shot_${System.currentTimeMillis()}.jpg")
-        pendingPath = file.absolutePath
-        launcher.launch(FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file))
+        trip[0] = false
+        awaitingReturn = true
+        // Start the phone's default camera app itself (normal mode, with its mode strip) instead of a
+        // generic "still image camera" intent, which can pop up an app chooser on some phones.
+        val pm = context.packageManager
+        val cameraPackage = pm.resolveActivity(Intent(MediaStore.ACTION_IMAGE_CAPTURE), PackageManager.MATCH_DEFAULT_ONLY)
+            ?.activityInfo?.packageName?.takeIf { it != "android" }
+        val launch = cameraPackage?.let { pm.getLaunchIntentForPackage(it) } ?: Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)
+        context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 }
 
@@ -91,8 +121,8 @@ fun DocumentsScreen(state: UiState, actions: DocumentActions, onBack: () -> Unit
     var renaming by remember { mutableStateOf<ScooterDocument?>(null) }
     var deleting by remember { mutableStateOf<ScooterDocument?>(null) }
 
-    val takePhoto = rememberCameraLauncher { file ->
-        pendingPhotos = pendingPhotos + file.absolutePath
+    val takePhoto = rememberScanLauncher { uris ->
+        pendingPhotos = pendingPhotos + uris.map { it.toString() }
         nameDialogOpen = true
     }
     val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -147,6 +177,13 @@ fun DocumentsScreen(state: UiState, actions: DocumentActions, onBack: () -> Unit
             ) { Text("📁  ${s.docsImport}") }
         }
 
+        Text(
+            s.docsScanHint,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+
         if (documents.isEmpty()) {
             Text(
                 s.docsEmpty,
@@ -188,7 +225,6 @@ fun DocumentsScreen(state: UiState, actions: DocumentActions, onBack: () -> Unit
             mutableStateOf(importing?.second ?: draftName.ifBlank { "${s.docsDefaultName} ${documents.size + 1}" })
         }
         fun discard() {
-            photosTaken.forEach { File(it).delete() }
             pendingPhotos = emptyList()
             nameDialogOpen = false
             pendingImport = null
@@ -213,7 +249,7 @@ fun DocumentsScreen(state: UiState, actions: DocumentActions, onBack: () -> Unit
                         if (importing != null) {
                             actions.onImport(importing.first, name.trim())
                         } else {
-                            actions.onAddPhotos(photosTaken.map { File(it) }, name.trim())
+                            actions.onAddPhotos(photosTaken.map(Uri::parse), name.trim())
                         }
                         pendingPhotos = emptyList()
                         nameDialogOpen = false

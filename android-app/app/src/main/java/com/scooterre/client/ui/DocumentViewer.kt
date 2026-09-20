@@ -75,7 +75,7 @@ fun DocumentViewerScreen(state: UiState, actions: DocumentActions, onBack: () ->
     }
     val pagerState = rememberPagerState(pageCount = { pageCount })
     var zoomed by remember { mutableStateOf(false) }
-    val addPage = rememberCameraLauncher { file -> actions.onAppendPhoto(doc.id, file) }
+    val addPage = rememberScanLauncher { uris -> actions.onAppendPhotos(doc.id, uris) }
 
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         if (pageCount > 0) {

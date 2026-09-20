@@ -51,7 +51,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import java.io.File
 
 // Deliberately left blank rather than pre-filled with a real device's MAC - this is a public
 // build meant for anyone's own scooter, not just the one it was originally developed against.
@@ -252,11 +251,11 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /** The first photo becomes the document, the rest are appended as further pages. */
-    fun addDocumentPhotos(files: List<File>, name: String) = documentJob { mac ->
-        val first = files.firstOrNull() ?: return@documentJob
-        val doc = documentStore.addImage(mac, name) { first.inputStream() }
-        files.drop(1).forEach { f -> documentStore.appendImage(mac, doc.id) { f.inputStream() } }
-        files.forEach { it.delete() }
+    fun addDocumentPhotos(uris: List<Uri>, name: String) = documentJob { mac ->
+        val resolver = getApplication<Application>().contentResolver
+        val first = uris.firstOrNull() ?: return@documentJob
+        val doc = documentStore.addImage(mac, name) { resolver.openInputStream(first) }
+        uris.drop(1).forEach { u -> documentStore.appendImage(mac, doc.id) { resolver.openInputStream(u) } }
     }
 
     fun addDocumentFromUri(uri: Uri, name: String) = documentJob { mac ->
@@ -268,9 +267,9 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun appendDocumentPhoto(docId: String, file: File) = documentJob { mac ->
-        documentStore.appendImage(mac, docId) { file.inputStream() }
-        file.delete()
+    fun appendDocumentPhotos(docId: String, uris: List<Uri>) = documentJob { mac ->
+        val resolver = getApplication<Application>().contentResolver
+        uris.forEach { u -> documentStore.appendImage(mac, docId) { resolver.openInputStream(u) } }
     }
 
     fun renameDocument(docId: String, name: String) = documentJob { mac -> documentStore.rename(mac, docId, name) }
