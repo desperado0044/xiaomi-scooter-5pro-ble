@@ -29,6 +29,7 @@ import com.scooterre.client.protocol.SpecReadResult
 import com.scooterre.client.protocol.SpecType
 import com.scooterre.client.protocol.encodeValue
 import com.scooterre.client.ui.Lang
+import com.scooterre.client.ui.ThemeMode
 import com.scooterre.client.ui.modelDisplayName
 import com.scooterre.client.ui.propertyName
 import com.scooterre.client.ui.strings
@@ -48,6 +49,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 const val DEFAULT_SCOOTER_MAC = ""
 private const val KEY_LAST_MAC = "last_mac"
 private const val KEY_LANG = "lang"
+private const val KEY_THEME_MODE = "theme_mode"
+private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
 
 /** Polled every ~2.5s (see [ScooterViewModel.startAutoRefresh]) while actually riding, instead of
  * the full ~50-property table - small enough that one pass stays well inside that window even
@@ -63,6 +66,8 @@ enum class Screen { LOGIN, DASHBOARD, DEVICE_PICKER }
 data class UiState(
     val screen: Screen = Screen.LOGIN,
     val language: Lang = Lang.DE,
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    val keepScreenOn: Boolean = true,
     val macAddress: String = DEFAULT_SCOOTER_MAC,
     // Preferably the name from the Xiaomi cloud account (finishCloudLogin), falling back to the
     // BLE-advertised name if picked from a scan, or null for a generic label in the dashboard.
@@ -132,6 +137,9 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
                 screen = if (known.isNotEmpty()) Screen.DEVICE_PICKER else Screen.LOGIN,
                 macAddress = prefs.getString(KEY_LAST_MAC, DEFAULT_SCOOTER_MAC) ?: DEFAULT_SCOOTER_MAC,
                 language = if (prefs.getString(KEY_LANG, "DE") == "EN") Lang.EN else Lang.DE,
+                themeMode = runCatching { ThemeMode.valueOf(prefs.getString(KEY_THEME_MODE, null) ?: "SYSTEM") }
+                    .getOrDefault(ThemeMode.SYSTEM),
+                keepScreenOn = prefs.getBoolean(KEY_KEEP_SCREEN_ON, true),
                 knownDevices = known,
             )
         }
@@ -140,6 +148,16 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
 
     init {
         _state.update { it.copy(hasSavedLtmk = secureStore.loadLtmk(it.macAddress) != null) }
+    }
+
+    fun setThemeMode(mode: ThemeMode) {
+        prefs.edit().putString(KEY_THEME_MODE, mode.name).apply()
+        _state.update { it.copy(themeMode = mode) }
+    }
+
+    fun setKeepScreenOn(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_KEEP_SCREEN_ON, enabled).apply()
+        _state.update { it.copy(keepScreenOn = enabled) }
     }
 
     fun toggleLanguage() {

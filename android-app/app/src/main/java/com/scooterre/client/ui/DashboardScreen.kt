@@ -31,6 +31,7 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -73,6 +74,7 @@ private enum class DashboardSection(val emoji: String, val label: (AppStrings) -
     IDENTIFICATION("🪪", { it.tabIdentification }),
     RIDE_LOG("📖", { it.tabRideLog }),
     HISTORY("📈", { it.tabHistory }),
+    APP_SETTINGS("🎛️", { it.sectionApp }),
 }
 
 private fun namesFor(section: DashboardSection, profile: SpecProfile): List<String>? = when (section) {
@@ -84,6 +86,7 @@ private fun namesFor(section: DashboardSection, profile: SpecProfile): List<Stri
     DashboardSection.IDENTIFICATION -> profile.tabIdentification
     DashboardSection.RIDE_LOG -> profile.tabRideLog
     DashboardSection.HISTORY -> null
+    DashboardSection.APP_SETTINGS -> null
 }
 
 /** Scale factor for numeric properties. Confirmed against the plugin's own UNITS table and
@@ -154,6 +157,8 @@ fun DashboardScreen(
     onAttributeRideMode: (Long) -> Unit,
     onSkipPendingRide: () -> Unit,
     onResetHistory: () -> Unit,
+    onSetThemeMode: (ThemeMode) -> Unit,
+    onSetKeepScreenOn: (Boolean) -> Unit,
 ) {
     val s = strings(state.language)
     val profile = state.activeSpecProfile
@@ -250,7 +255,9 @@ fun DashboardScreen(
             }
             HorizontalDivider()
 
-            if (selectedSection == DashboardSection.HISTORY) {
+            if (selectedSection == DashboardSection.APP_SETTINGS) {
+                AppSettingsContent(state, s, onSetThemeMode, onSetKeepScreenOn)
+            } else if (selectedSection == DashboardSection.HISTORY) {
                 HistoryTabContent(state, s, onResetHistory)
             } else if (selectedSection == DashboardSection.OVERVIEW) {
                 OverviewContent(state, s, profile, propertiesByName, onSetBool, onSetNumeric, onSetString)
@@ -409,6 +416,62 @@ private fun BigStatCard(modifier: Modifier = Modifier, value: String, unit: Stri
             }
             Spacer(modifier = Modifier.height(2.dp))
             Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun AppSettingsContent(
+    state: UiState,
+    s: AppStrings,
+    onSetThemeMode: (ThemeMode) -> Unit,
+    onSetKeepScreenOn: (Boolean) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
+                Text(s.themeLabel, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                val modes = listOf(
+                    ThemeMode.SYSTEM to s.themeSystem,
+                    ThemeMode.AUTO to s.themeAuto,
+                    ThemeMode.LIGHT to s.themeLight,
+                    ThemeMode.DARK to s.themeDark,
+                )
+                for ((mode, label) in modes) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = state.themeMode == mode, onClick = { onSetThemeMode(mode) })
+                        Text(label, style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+            }
+        }
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                    Text(s.keepScreenOnLabel, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                    Text(
+                        s.keepScreenOnHint,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = state.keepScreenOn, onCheckedChange = onSetKeepScreenOn)
+            }
         }
     }
 }
