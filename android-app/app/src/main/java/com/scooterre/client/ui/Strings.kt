@@ -160,6 +160,17 @@ data class AppStrings(
     val importWrongPasswordError: String,
     val appLockLabel: String,
     val appLockHint: String,
+    val insuranceLabel: String,
+    val insuranceHint: String,
+    val insuranceTestButton: String,
+    val insuranceTestSent: String,
+    val insuranceNotificationsBlocked: String,
+    val insuranceAppliedLabel: (String) -> String,
+    val insuranceChannelName: String,
+    val insuranceTestPrefix: String,
+    val insuranceActionApplied: String,
+    val insuranceNotifTitle: (com.scooterre.client.reminder.InsuranceSchedule.Stage) -> String,
+    val insuranceNotifText: (String, String) -> String,
     val lockScreenTitle: String,
     val lockUnlockButton: String,
     val lockPromptTitle: String,
@@ -334,6 +345,24 @@ val STRINGS_DE = AppStrings(
     importWrongPasswordError = "Falsches Passwort (oder beschädigte Datei).",
     appLockLabel = "App-Sperre",
     appLockHint = "Fragt beim Start der App nach Fingerabdruck oder Geräte-PIN. Nach dem Wechsel in den Hintergrund bleibt die laufende App entsperrt; das Widget ist nicht geschützt.",
+    insuranceLabel = "Versicherungskennzeichen-Erinnerung",
+    insuranceHint = "Erinnert einen Monat, eine Woche und am letzten Tag vor Ablauf (Deutschland: das Kennzeichen gilt jeweils bis Ende Februar). Mit „Neue Versicherung ist beantragt\" bei den Dokumenten lassen sich die Meldungen stoppen.",
+    insuranceTestButton = "Testbenachrichtigung senden",
+    insuranceTestSent = "Testbenachrichtigung gesendet.",
+    insuranceNotificationsBlocked = "Benachrichtigungen sind für die App nicht erlaubt. Bitte in den Systemeinstellungen freigeben.",
+    insuranceAppliedLabel = { d -> "Neue Versicherung ist beantragt (aktuelles Kennzeichen gilt bis $d)" },
+    insuranceChannelName = "Versicherungskennzeichen",
+    insuranceTestPrefix = "Test: ",
+    insuranceActionApplied = "Neue Versicherung beantragt",
+    insuranceNotifTitle = { stage ->
+        when (stage) {
+            com.scooterre.client.reminder.InsuranceSchedule.Stage.MONTH -> "Versicherungskennzeichen läuft in einem Monat ab"
+            com.scooterre.client.reminder.InsuranceSchedule.Stage.WEEK -> "Versicherungskennzeichen läuft in einer Woche ab"
+            com.scooterre.client.reminder.InsuranceSchedule.Stage.LAST_DAY -> "Versicherungskennzeichen läuft heute ab"
+            else -> "Versicherungskennzeichen"
+        }
+    },
+    insuranceNotifText = { date, names -> "Gültig bis $date – $names. Neue Versicherung schon beantragt?" },
     lockScreenTitle = "App gesperrt",
     lockUnlockButton = "Entsperren",
     lockPromptTitle = "App entsperren",
@@ -519,6 +548,24 @@ val STRINGS_EN = AppStrings(
     importWrongPasswordError = "Wrong password (or damaged file).",
     appLockLabel = "App lock",
     appLockHint = "Asks for fingerprint or device PIN when the app starts. A running app stays unlocked when it goes to the background; the widget is not protected.",
+    insuranceLabel = "Insurance plate reminder",
+    insuranceHint = "Reminds you one month, one week and on the last day before it expires (Germany: the plate is valid until the end of February each year). Tick \"New insurance applied for\" in the documents to stop the reminders.",
+    insuranceTestButton = "Send test notification",
+    insuranceTestSent = "Test notification sent.",
+    insuranceNotificationsBlocked = "Notifications are not allowed for the app. Please allow them in the system settings.",
+    insuranceAppliedLabel = { d -> "New insurance applied for (current plate is valid until $d)" },
+    insuranceChannelName = "Insurance plate",
+    insuranceTestPrefix = "Test: ",
+    insuranceActionApplied = "New insurance applied for",
+    insuranceNotifTitle = { stage ->
+        when (stage) {
+            com.scooterre.client.reminder.InsuranceSchedule.Stage.MONTH -> "Insurance plate expires in one month"
+            com.scooterre.client.reminder.InsuranceSchedule.Stage.WEEK -> "Insurance plate expires in one week"
+            com.scooterre.client.reminder.InsuranceSchedule.Stage.LAST_DAY -> "Insurance plate expires today"
+            else -> "Insurance plate"
+        }
+    },
+    insuranceNotifText = { date, names -> "Valid until $date – $names. Already applied for the new insurance?" },
     lockScreenTitle = "App locked",
     lockUnlockButton = "Unlock",
     lockPromptTitle = "Unlock app",

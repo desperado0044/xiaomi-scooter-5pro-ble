@@ -9,6 +9,8 @@
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Android 13+: needed to show the optional insurance-plate reminders. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
 
     <!-- Lets the documents screen find the phone's default camera app (Android 11+ package visibility). -->
@@ -48,6 +50,11 @@
                 <data android:scheme="scooterre" android:host="login" />
             </intent-filter>
         </activity>
+
+        <!-- The "new insurance applied for" button of the insurance-plate reminder notification. -->
+        <receiver
+            android:name=".reminder.InsuranceActionReceiver"
+            android:exported="false" />
 
         <!-- Hands an export bundle to the share sheet (chat apps etc.) without a storage permission. -->
         <provider

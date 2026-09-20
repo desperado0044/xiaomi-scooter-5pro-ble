@@ -145,6 +145,9 @@ disclaimer).
 - **App lock** (optional, off by default): asks for fingerprint or device PIN when the app starts. It
   only applies at app start — a running app stays unlocked when it goes to the background, and the
   widget is not protected.
+- **Insurance plate reminder** (optional, off by default, Germany): notifications one month, one week and on
+  the last day before the plate expires at the end of February, with a "New insurance applied for" button
+  in the notification (or a checkbox in the documents) to stop them. No connection to the scooter needed.
 - The back gesture steps outward: close menu → overview → clean disconnect to the device list →
   leave the app. There is also a "Disconnect" button.
 

@@ -33,6 +33,8 @@ import com.scooterre.client.protocol.SpecProperty
 import com.scooterre.client.protocol.SpecReadResult
 import com.scooterre.client.protocol.SpecType
 import com.scooterre.client.protocol.encodeValue
+import com.scooterre.client.reminder.InsuranceReminders
+import com.scooterre.client.reminder.InsuranceSchedule
 import com.scooterre.client.ui.Lang
 import com.scooterre.client.ui.resolveLang
 import com.scooterre.client.ui.ThemeMode
@@ -106,6 +108,11 @@ data class UiState(
     // App lock (opt-in, default off): asks for fingerprint/PIN once per app start.
     val appLock: Boolean = false,
     val locked: Boolean = false,
+    // Insurance-plate reminders (opt-in): the end of the running plate period and the scooters
+    // already ticked off ("new insurance applied for") for it.
+    val insuranceReminder: Boolean = false,
+    val insuranceExpiry: java.time.LocalDate = InsuranceSchedule.expiryFor(java.time.LocalDate.now()),
+    val insuranceApplied: Set<String> = emptySet(),
     val lastBackupMillis: Long = 0L,
     val backupMessage: String? = null,
     val availableUpdate: UpdateInfo? = null,
@@ -198,6 +205,10 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
                 updateCheck = prefs.getBoolean(KEY_UPDATE_CHECK, true),
                 appLock = prefs.getBoolean(KEY_APP_LOCK, false),
                 locked = prefs.getBoolean(KEY_APP_LOCK, false),
+                insuranceReminder = InsuranceReminders.isEnabled(application),
+                insuranceApplied = known.filter {
+                    InsuranceReminders.isApplied(application, it.mac, InsuranceSchedule.expiryFor(java.time.LocalDate.now()))
+                }.map { it.mac }.toSet(),
                 lastBackupMillis = prefs.getLong(KEY_LAST_BACKUP, 0L),
                 documentCounts = known.associate { it.mac to documentStore.count(it.mac) },
                 availableUpdate = if (prefs.getBoolean(KEY_UPDATE_CHECK, true)) storedUpdate() else null,
@@ -209,6 +220,12 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
 
     init {
         _state.update { it.copy(hasSavedLtmk = secureStore.loadLtmk(it.macAddress) != null) }
+        if (_state.value.insuranceReminder) {
+            // Keep the daily job scheduled and catch up on a stage the job may have missed.
+            val app = getApplication<Application>()
+            InsuranceReminders.schedule(app, replace = false)
+            viewModelScope.launch(Dispatchers.IO) { InsuranceReminders.checkAndNotify(app) }
+        }
     }
 
     // Screens that are opened on top of the current one (settings, documents) remember where to
@@ -242,6 +259,8 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
             st.copy(
                 documents = mac?.let(documentStore::list) ?: emptyList(),
                 documentCounts = deviceRegistry.list().associate { it.mac to documentStore.count(it.mac) },
+                // The notification's button can tick scooters off while the app is closed.
+                insuranceApplied = insuranceAppliedNow(),
             )
         }
     }
@@ -414,6 +433,40 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         prefs.edit().putBoolean(KEY_APP_LOCK, enabled).apply()
         _state.update { it.copy(appLock = enabled) }
     }
+
+    private fun insuranceAppliedNow(): Set<String> {
+        val app = getApplication<Application>()
+        val expiry = InsuranceSchedule.expiryFor(java.time.LocalDate.now())
+        return deviceRegistry.list().filter { InsuranceReminders.isApplied(app, it.mac, expiry) }.map { it.mac }.toSet()
+    }
+
+    /** Re-reads the ticked-off scooters (the notification's button changes them while the app is closed). */
+    fun refreshInsuranceState() {
+        _state.update { it.copy(insuranceApplied = insuranceAppliedNow(), insuranceExpiry = InsuranceSchedule.expiryFor(java.time.LocalDate.now())) }
+    }
+
+    fun setInsuranceReminder(enabled: Boolean) {
+        val app = getApplication<Application>()
+        InsuranceReminders.setEnabled(app, enabled)
+        _state.update {
+            it.copy(
+                insuranceReminder = enabled,
+                insuranceExpiry = InsuranceSchedule.expiryFor(java.time.LocalDate.now()),
+                insuranceApplied = insuranceAppliedNow(),
+            )
+        }
+        // Switching it on inside the reminder window should not wait for tomorrow's job.
+        if (enabled) viewModelScope.launch(Dispatchers.IO) { InsuranceReminders.checkAndNotify(app) }
+    }
+
+    fun setInsuranceApplied(mac: String, applied: Boolean) {
+        val expiry = InsuranceSchedule.expiryFor(java.time.LocalDate.now())
+        InsuranceReminders.setApplied(getApplication(), mac, expiry, applied)
+        _state.update { it.copy(insuranceExpiry = expiry, insuranceApplied = insuranceAppliedNow()) }
+    }
+
+    /** True if the sample notification went out (false: notifications are blocked for the app). */
+    fun sendInsuranceTest(): Boolean = InsuranceReminders.postTest(getApplication())
 
     fun markBackupDone() {
         val now = System.currentTimeMillis()

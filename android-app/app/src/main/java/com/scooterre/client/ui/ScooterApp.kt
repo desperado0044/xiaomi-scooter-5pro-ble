@@ -79,6 +79,14 @@ fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
     BackHandler(enabled = state.screen == Screen.APP_SETTINGS) { viewModel.closeAppSettings() }
     BackHandler(enabled = state.screen == Screen.DOCUMENTS || state.screen == Screen.DOCUMENT_VIEWER) { viewModel.navigateBack() }
 
+    // Android 13+ asks for the notification permission once, when the insurance reminders are switched on.
+    val notificationPermission = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) viewModel.setInsuranceReminder(true)
+        else Toast.makeText(context, lockStrings.insuranceNotificationsBlocked, Toast.LENGTH_LONG).show()
+    }
+
     val settingsActions = SettingsActions(
         onSetLanguage = viewModel::setLanguage,
         onSetThemeMode = viewModel::setThemeMode,
@@ -93,6 +101,24 @@ fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
         onRestoreBackup = viewModel::restoreBackup,
         onBackupCreated = viewModel::markBackupDone,
         onDismissBackupMessage = viewModel::dismissBackupMessage,
+        onSetInsuranceReminder = { enable ->
+            if (!enable) {
+                viewModel.setInsuranceReminder(false)
+            } else if (android.os.Build.VERSION.SDK_INT >= 33 &&
+                androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) !=
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            } else if (!androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+                Toast.makeText(context, lockStrings.insuranceNotificationsBlocked, Toast.LENGTH_LONG).show()
+            } else {
+                viewModel.setInsuranceReminder(true)
+            }
+        },
+        onTestInsuranceNotification = {
+            val sent = viewModel.sendInsuranceTest()
+            Toast.makeText(context, if (sent) lockStrings.insuranceTestSent else lockStrings.insuranceNotificationsBlocked, Toast.LENGTH_LONG).show()
+        },
         onSetAppLock = { enable ->
             if (!enable) {
                 viewModel.setAppLock(false)
@@ -115,6 +141,7 @@ fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
         onAppendPhotos = viewModel::appendDocumentPhotos,
         onRename = viewModel::renameDocument,
         onDelete = viewModel::deleteDocument,
+        onSetInsuranceApplied = viewModel::setInsuranceApplied,
     )
 
     CompositionLocalProvider(LocalUnits provides state.units) {

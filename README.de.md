@@ -151,6 +151,10 @@ Fassung dieses Ausschlusses).
 - **App-Sperre** (optional, standardmäßig aus): fragt beim Start der App nach Fingerabdruck oder
   Geräte-PIN. Sie greift nur beim App-Start — nach dem Wechsel in den Hintergrund bleibt die
   laufende App entsperrt, und das Widget ist nicht geschützt.
+- **Erinnerung ans Versicherungskennzeichen** (optional, standardmäßig aus, Deutschland): Benachrichtigung
+  einen Monat, eine Woche und am letzten Tag vor Ablauf Ende Februar, mit dem Knopf „Neue Versicherung
+  beantragt" in der Benachrichtigung (oder einer Checkbox bei den Dokumenten) zum Stoppen. Kein Scooter in
+  der Nähe nötig.
 - Die Zurück-Geste geht stufenweise: Menü schließen → Übersicht → sauber trennen zur
   Geräteliste → App beenden. Zusätzlich gibt es den „Trennen"-Button.
 

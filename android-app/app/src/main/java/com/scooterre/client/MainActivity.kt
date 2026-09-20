@@ -10,6 +10,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.core.content.ContextCompat
+import com.scooterre.client.reminder.InsuranceReminders
 import com.scooterre.client.ui.ScooterApp
 import com.scooterre.client.viewmodel.ScooterViewModel
 
@@ -22,14 +23,29 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         ensureBluetoothPermissions()
         handleImportIntent(intent)
+        if (savedInstanceState == null) handleReminderIntent(intent)
         setContent {
             ScooterApp(viewModel = viewModel)
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        viewModel.refreshInsuranceState()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleImportIntent(intent)
+        handleReminderIntent(intent)
+    }
+
+    /** Tapping an insurance-plate reminder opens the documents of the scooter it names. */
+    private fun handleReminderIntent(intent: Intent?) {
+        if (intent?.getStringExtra(InsuranceReminders.EXTRA_OPEN) != InsuranceReminders.OPEN_DOCUMENTS) return
+        val mac = intent.getStringExtra(InsuranceReminders.EXTRA_MAC)
+        intent.removeExtra(InsuranceReminders.EXTRA_OPEN)
+        viewModel.runWhenUnlocked { viewModel.openDocuments(mac) }
     }
 
     /** scooterre://import?code=... / ?file=<name in getExternalFilesDir> and

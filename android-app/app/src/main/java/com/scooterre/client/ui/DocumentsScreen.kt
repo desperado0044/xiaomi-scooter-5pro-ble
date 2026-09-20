@@ -60,6 +60,7 @@ data class DocumentActions(
     val onAppendPhotos: (String, List<Uri>) -> Unit,
     val onRename: (String, String) -> Unit,
     val onDelete: (String) -> Unit,
+    val onSetInsuranceApplied: (String, Boolean) -> Unit,
 )
 
 /** Returns a function that opens the phone's own camera app (normal mode, so e.g. its document
@@ -171,6 +172,22 @@ fun DocumentsScreen(state: UiState, actions: DocumentActions, onBack: () -> Unit
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 10.dp),
                 )
+            }
+        }
+
+        // Insurance-plate reminders: ticking this stops them for the running plate period (until end of February).
+        if (state.insuranceReminder && mac != null) {
+            val applied = state.insuranceApplied.any { it.equals(mac, ignoreCase = true) }
+            val locale = if (state.language == Lang.DE) java.util.Locale.GERMANY else java.util.Locale.US
+            val until = state.insuranceExpiry.format(
+                java.time.format.DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.MEDIUM).withLocale(locale),
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp).clickable { actions.onSetInsuranceApplied(mac, !applied) },
+            ) {
+                androidx.compose.material3.Checkbox(checked = applied, onCheckedChange = { actions.onSetInsuranceApplied(mac, it) })
+                Text(s.insuranceAppliedLabel(until), style = MaterialTheme.typography.bodySmall)
             }
         }
 

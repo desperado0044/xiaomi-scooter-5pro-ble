@@ -85,6 +85,8 @@ data class SettingsActions(
     val onSetRideTracking: (Boolean) -> Unit,
     val onSetUpdateCheck: (Boolean) -> Unit,
     val onSetAppLock: (Boolean) -> Unit,
+    val onSetInsuranceReminder: (Boolean) -> Unit,
+    val onTestInsuranceNotification: () -> Unit,
     val onRestoreBackup: (Uri, String, Boolean) -> Unit,
     val onBackupCreated: () -> Unit,
     val onDismissBackupMessage: () -> Unit,
@@ -190,6 +192,10 @@ fun AppSettingsContent(state: UiState, s: AppStrings, settings: SettingsActions)
         SettingsSwitchCard(s.rideTrackingLabel, s.rideTrackingHint, state.rideTracking, settings.onSetRideTracking)
         SettingsSwitchCard(s.updateCheckLabel, s.updateCheckHint, state.updateCheck, settings.onSetUpdateCheck)
         SettingsSwitchCard(s.appLockLabel, s.appLockHint, state.appLock, settings.onSetAppLock)
+        SettingsSwitchCard(s.insuranceLabel, s.insuranceHint, state.insuranceReminder, settings.onSetInsuranceReminder)
+        if (state.insuranceReminder) {
+            androidx.compose.material3.TextButton(onClick = settings.onTestInsuranceNotification) { Text(s.insuranceTestButton) }
+        }
         BackupCard(state, s, settings)
         SettingsCard {
             Text(s.aboutLabel, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
