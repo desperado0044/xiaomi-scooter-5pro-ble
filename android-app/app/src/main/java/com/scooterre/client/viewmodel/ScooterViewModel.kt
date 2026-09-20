@@ -49,6 +49,15 @@ const val DEFAULT_SCOOTER_MAC = ""
 private const val KEY_LAST_MAC = "last_mac"
 private const val KEY_LANG = "lang"
 
+/** Polled every ~2.5s (see [ScooterViewModel.startAutoRefresh]) while actually riding, instead of
+ * the full ~50-property table - small enough that one pass stays well inside that window even
+ * without batching, and covers exactly what changes meaningfully second-to-second on a moving
+ * scooter (plus IS_RIDING itself, so the loop notices when the ride ends and drops back to the
+ * slower full-sweep cadence). */
+private val RIDE_PRIORITY_PROPERTIES = setOf(
+    "IS_RIDING", "AVERAGE_SPEED", "CURRENT_MILEAGE", "BATTERY_LEVEL", "REMAINING_MILEAGE", "RIDING_TIME", "RIDING_MODE",
+)
+
 enum class Screen { LOGIN, DASHBOARD, DEVICE_PICKER }
 
 data class UiState(
@@ -423,18 +432,23 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
      * are still safe to interleave with manual actions: SpecClient's own mutex (see its comment)
      * serializes all of them regardless of which caller issued them.
      *
-     * 10s between cycles, not continuous: a full pass over all ~50 properties (each its own
-     * request/response round trip, ~150-200ms measured) takes ~9s on its own already - too short
-     * a gap would mean it's running almost continuously, competing with UI interactions
-     * (switching tabs, tapping a switch) for the same serialized BLE request queue. Effective
-     * refresh cadence is therefore ~19s (9s active + 10s pause), not literally every 10s -
-     * batching multiple properties into one BLE request would be the real way to speed this up
-     * further, not attempted here. */
+     * Two cadences, not one - the previous single ~19s cycle (9s active pass over all ~50
+     * properties + 10s pause) was fine while parked but too sluggish while actually riding, where
+     * speed/distance/battery genuinely change second to second. While [RIDE_PRIORITY_PROPERTIES]'s
+     * own IS_RIDING reads true, only that small, ride-relevant subset is polled, every ~2.5s -
+     * matching the motor controller's own internal telemetry push cadence (2560 MCU ticks ≈ 2.5s,
+     * see reference/SCOOTER_5_PRO/research/REPORT.md §33-34's `61 30 0A` push-frame analysis)
+     * rather than an arbitrary faster number: the underlying values don't update at the source any
+     * faster than that, so polling quicker would just re-read the same stale number sooner.
+     * Once stopped/parked, it falls back to the full ~19s sweep as before - batching multiple
+     * properties into one BLE request would be the real way to speed the full sweep up further,
+     * not attempted here (see project memory's still-open batching item). */
     private fun startAutoRefresh() {
         autoRefreshJob?.cancel()
         autoRefreshJob = viewModelScope.launch {
             while (true) {
-                delay(10_000L)
+                val riding = (_state.value.values["IS_RIDING"]?.takeIf { it.ok }?.value as? Long) == 1L
+                delay(if (riding) 2_500L else 10_000L)
                 val spec = protocol?.requireSpecClient() ?: break
                 try {
                     // Collected locally and applied in one state update at the end, instead of
@@ -442,7 +456,9 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
                     // at once, not visibly re-build the screen property by property the way the
                     // very first load after connecting does.
                     val results = mutableMapOf<String, SpecReadResult>()
-                    for (property in _state.value.activeSpecProfile.all) {
+                    val allProperties = _state.value.activeSpecProfile.all
+                    val toRead = if (riding) allProperties.filter { it.name in RIDE_PRIORITY_PROPERTIES } else allProperties
+                    for (property in toRead) {
                         results[property.name] = withContext(Dispatchers.IO) { spec.get(property) }
                     }
                     _state.update { it.copy(values = it.values + results) }
