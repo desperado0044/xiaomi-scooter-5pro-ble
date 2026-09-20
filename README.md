@@ -15,8 +15,7 @@ die offizielle Mi-Home-App. Das komplette BLE-Auth-Protokoll (ECDH P-256 → HKD
 AES-CCM) wurde durch eigene Reverse-Engineering-Arbeit nachvollzogen und ist Byte für Byte
 gegen beide realen Geräte verifiziert.
 
-Dies ist ein privates Hobbyprojekt, entstanden aus Neugier am eigenen Gerät — kein kommerzielles
-Produkt, keine Verbindung zu Xiaomi.
+Dies ist ein unabhängiges, nicht-kommerzielles Projekt ohne Verbindung zu Xiaomi.
 
 ### ⚠️ Haftungsausschluss
 
@@ -63,7 +62,7 @@ Fassung dieses Ausschlusses).
   Zugangscode (Export/Import-Funktion): er enthält den vollständigen BLE-Schlüssel eines Geräts
   und sollte nur an Personen weitergegeben werden, die dieses Gerät auch tatsächlich mitbenutzen
   dürfen.
-- **Kein Support, keine Zusicherung von Weiterentwicklung.** Dies ist ein privates Hobbyprojekt.
+- **Kein Support, keine Zusicherung von Weiterentwicklung.**
   Xiaomi kann das Protokoll jederzeit per Firmware-Update ändern und diese Software funktionsunfähig
   machen, ohne dass eine Aktualisierung dieses Repositories zu erwarten ist.
 
@@ -139,8 +138,7 @@ without the official Mi Home app. The complete BLE auth protocol (ECDH P-256 →
 AES-CCM) was reverse-engineered from scratch and is verified byte-for-byte against both real
 devices.
 
-This is a private hobby project born out of curiosity about my own device — not a commercial
-product, no affiliation with Xiaomi.
+This is an independent, non-commercial project with no affiliation with Xiaomi.
 
 ### ⚠️ Disclaimer
 
@@ -183,7 +181,7 @@ disclaimer).
   even so, use of these APIs is at your own responsibility. The same applies to an exported access
   code (export/import feature): it contains the full BLE key for a device and should only be
   shared with people who are actually allowed to use that device.
-- **No support, no promise of continued development.** This is a private hobby project. Xiaomi can
+- **No support, no promise of continued development.** Xiaomi can
   change the protocol at any time via a firmware update and render this software non-functional,
   with no update to this repository to be expected.
 
