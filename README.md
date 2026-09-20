@@ -48,8 +48,7 @@ Fassung dieses Ausschlusses).
 - **Getestet am Xiaomi Electric Scooter 5 Pro und 5 Max** (BLE-Chip RTL8762C, Firmware
   2.7.0_0015.x). Der normale **Electric Scooter 5** (ohne „Pro"/„Max") **sollte ebenfalls
   funktionieren**, wurde aber nicht getestet — die App verwendet für nicht erkannte
-  Modelle die 5-Pro-Tabelle. Erfahrungsberichte sind willkommen — am einfachsten über das
-  [Kompatibilitätsbericht-Formular](https://github.com/desperado0044/xiaomi-scooter-5pro-ble/issues/new?template=compatibility_report.yml).
+  Modelle die 5-Pro-Tabelle.
 - **Keine Geschwindigkeitsbegrenzung wird umgangen.** Dieses Projekt implementiert bewusst
   **keine** Funktion zum Ändern der regionalen Geschwindigkeitsbegrenzung oder zum Beschreiben
   der Motorsteuerungs-Firmware — das würde physischen ST-Link/SWD-Zugriff auf den Motorcontroller
@@ -269,8 +268,7 @@ disclaimer).
 - **Tested on the Xiaomi Electric Scooter 5 Pro and 5 Max** (BLE chip RTL8762C, firmware
   2.7.0_0015.x). The standard **Electric Scooter 5** (without "Pro"/"Max") **should work as
   well**, but it has not been tested — for models the app does not recognize it uses the
-  5 Pro's property table. Reports are welcome — the easiest way is the
-  [compatibility report form](https://github.com/desperado0044/xiaomi-scooter-5pro-ble/issues/new?template=compatibility_report.yml).
+  5 Pro's property table.
 - **No speed limiter is bypassed.** This project deliberately implements **no** function to
   change the regional speed limit or to flash the motor-controller firmware — that would require
   physical ST-Link/SWD access to the motor controller and was intentionally not built, regardless
