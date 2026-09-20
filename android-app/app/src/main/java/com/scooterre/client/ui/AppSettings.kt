@@ -200,7 +200,7 @@ fun AppSettingsContent(state: UiState, s: AppStrings, settings: SettingsActions)
         SettingsCard {
             Text(s.aboutLabel, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
             Text(s.aboutVersion(versionName), style = MaterialTheme.typography.bodyMedium)
-            state.availableUpdate?.let { UpdateBanner(it, s, Modifier.padding(vertical = 6.dp)) }
+            state.availableUpdate?.let { UpdateBanner(it, state, s, Modifier.padding(vertical = 6.dp)) }
             Text(
                 s.aboutBody,
                 style = MaterialTheme.typography.labelMedium,

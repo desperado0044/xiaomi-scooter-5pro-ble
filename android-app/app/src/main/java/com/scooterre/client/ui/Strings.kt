@@ -128,6 +128,11 @@ data class AppStrings(
     val deviceListMenu: String,
     val updateAvailable: (String) -> String,
     val updateOpenButton: String,
+    val updateDownloadButton: String,
+    val updateInstallButton: String,
+    val updateDownloading: (Int) -> String,
+    val updateAllowInstallHint: String,
+    val updateProblemText: (com.scooterre.client.update.UpdateProblem) -> String,
     val updateCheckLabel: String,
     val updateCheckHint: String,
     val docsTileTitle: String,
@@ -325,6 +330,18 @@ val STRINGS_DE = AppStrings(
     deviceListMenu = "Geräteliste",
     updateAvailable = { v -> "Update verfügbar: Version $v" },
     updateOpenButton = "Ansehen",
+    updateDownloadButton = "Update laden",
+    updateInstallButton = "Installieren",
+    updateDownloading = { p -> "Lade … $p %" },
+    updateAllowInstallHint = "Erlaube dieser App im nächsten Fenster, Apps zu installieren, und tippe danach auf „Installieren\".",
+    updateProblemText = { problem ->
+        when (problem) {
+            com.scooterre.client.update.UpdateProblem.DOWNLOAD -> "Der Download ist fehlgeschlagen. Bitte später erneut versuchen oder die Release-Seite öffnen."
+            com.scooterre.client.update.UpdateProblem.HASH -> "Die geladene Datei stimmt nicht mit der veröffentlichten Prüfsumme überein und wurde verworfen."
+            com.scooterre.client.update.UpdateProblem.SIGNER -> "Die geladene Datei ist mit einem anderen Schlüssel signiert als die installierte App und wurde verworfen."
+            com.scooterre.client.update.UpdateProblem.NOT_APK -> "Die geladene Datei ist keine gültige App und wurde verworfen."
+        }
+    },
     updateCheckLabel = "Nach Updates suchen",
     updateCheckHint = "Fragt einmal täglich bei GitHub nach einer neuen Version. Dabei sieht GitHub deine IP-Adresse.",
     docsTileTitle = "Dokumente",
@@ -528,6 +545,18 @@ val STRINGS_EN = AppStrings(
     deviceListMenu = "Device list",
     updateAvailable = { v -> "Update available: version $v" },
     updateOpenButton = "View",
+    updateDownloadButton = "Download update",
+    updateInstallButton = "Install",
+    updateDownloading = { p -> "Downloading … $p %" },
+    updateAllowInstallHint = "In the next window allow this app to install apps, then tap \"Install\".",
+    updateProblemText = { problem ->
+        when (problem) {
+            com.scooterre.client.update.UpdateProblem.DOWNLOAD -> "The download failed. Please try again later or open the release page."
+            com.scooterre.client.update.UpdateProblem.HASH -> "The downloaded file does not match the published checksum and was discarded."
+            com.scooterre.client.update.UpdateProblem.SIGNER -> "The downloaded file is signed with a different key than the installed app and was discarded."
+            com.scooterre.client.update.UpdateProblem.NOT_APK -> "The downloaded file is not a valid app and was discarded."
+        }
+    },
     updateCheckLabel = "Check for updates",
     updateCheckHint = "Asks GitHub once a day for a newer version. GitHub sees your IP address when it does.",
     docsTileTitle = "Documents",

@@ -42,7 +42,10 @@ import com.scooterre.client.ui.UnitSystem
 import com.scooterre.client.ui.distance
 import com.scooterre.client.ui.distanceUnit
 import com.scooterre.client.update.UpdateChecker
+import com.scooterre.client.update.UpdateDownloadResult
 import com.scooterre.client.update.UpdateInfo
+import com.scooterre.client.update.UpdateInstaller
+import com.scooterre.client.update.UpdateProblem
 import com.scooterre.client.ui.modelDisplayName
 import com.scooterre.client.ui.propertyName
 import com.scooterre.client.ui.strings
@@ -77,6 +80,8 @@ private const val KEY_LAST_BACKUP = "last_backup_millis"
 private const val KEY_UPDATE_LAST_CHECK = "update_last_check"
 private const val KEY_UPDATE_TAG = "update_latest_tag"
 private const val KEY_UPDATE_URL = "update_latest_url"
+private const val KEY_UPDATE_APK_URL = "update_latest_apk"
+private const val KEY_UPDATE_APK_SHA = "update_latest_apk_sha"
 private const val UPDATE_CHECK_INTERVAL_MS = 24L * 60 * 60 * 1000
 
 /** Polled every ~2.5s (see [ScooterViewModel.startAutoRefresh]) while actually riding, instead of
@@ -116,6 +121,12 @@ data class UiState(
     val lastBackupMillis: Long = 0L,
     val backupMessage: String? = null,
     val availableUpdate: UpdateInfo? = null,
+    // "Download update": progress 0..100 while downloading, ready once the file is downloaded and
+    // verified, and what went wrong (the file is then discarded).
+    val updateProgress: Int? = null,
+    val updateReady: Boolean = false,
+    val updateNeedsPermission: Boolean = false,
+    val updateProblem: UpdateProblem? = null,
     // Documents: which scooter's list is open, its documents, the one shown full screen, and the
     // per-scooter counts shown on the device list.
     val documentsMac: String? = null,
@@ -220,6 +231,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
 
     init {
         _state.update { it.copy(hasSavedLtmk = secureStore.loadLtmk(it.macAddress) != null) }
+        UpdateInstaller.cleanup(getApplication())
         if (_state.value.insuranceReminder) {
             // Keep the daily job scheduled and catch up on a stage the job may have missed.
             val app = getApplication<Application>()
@@ -392,7 +404,9 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     private fun storedUpdate(): UpdateInfo? {
         val tag = prefs.getString(KEY_UPDATE_TAG, null) ?: return null
         val url = prefs.getString(KEY_UPDATE_URL, null) ?: return null
-        return if (UpdateChecker.isNewer(tag, installedVersion())) UpdateInfo(tag, url) else null
+        val apk = prefs.getString(KEY_UPDATE_APK_URL, null)
+        val sha = prefs.getString(KEY_UPDATE_APK_SHA, null)
+        return if (UpdateChecker.isNewer(tag, installedVersion())) UpdateInfo(tag, url, apk, sha) else null
     }
 
     private suspend fun refreshUpdateInfo(force: Boolean) {
@@ -400,9 +414,52 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         val now = System.currentTimeMillis()
         if (force || now - prefs.getLong(KEY_UPDATE_LAST_CHECK, 0L) >= UPDATE_CHECK_INTERVAL_MS) {
             val latest = withContext(Dispatchers.IO) { UpdateChecker.fetchLatest() } ?: return
-            prefs.edit().putLong(KEY_UPDATE_LAST_CHECK, now).putString(KEY_UPDATE_TAG, latest.version).putString(KEY_UPDATE_URL, latest.url).apply()
+            prefs.edit().putLong(KEY_UPDATE_LAST_CHECK, now).putString(KEY_UPDATE_TAG, latest.version).putString(KEY_UPDATE_URL, latest.url)
+                .putString(KEY_UPDATE_APK_URL, latest.apkUrl).putString(KEY_UPDATE_APK_SHA, latest.apkSha256).apply()
         }
         _state.update { it.copy(availableUpdate = storedUpdate()) }
+    }
+
+    private var downloadedUpdate: java.io.File? = null
+
+    /** The "Download update" button: downloads and checks the APK, then opens the system installer. */
+    fun downloadUpdate() {
+        val info = _state.value.availableUpdate ?: return
+        if (info.apkUrl == null || _state.value.updateProgress != null) return
+        val app = getApplication<Application>()
+        _state.update { it.copy(updateProgress = 0, updateProblem = null, updateReady = false, updateNeedsPermission = false) }
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                UpdateInstaller.downloadAndVerify(app, info) { percent -> _state.update { it.copy(updateProgress = percent) } }
+            }
+            when (result) {
+                is UpdateDownloadResult.Ok -> {
+                    downloadedUpdate = result.file
+                    _state.update { it.copy(updateProgress = null, updateReady = true) }
+                    startUpdateInstall()
+                }
+                is UpdateDownloadResult.Failed -> _state.update { it.copy(updateProgress = null, updateProblem = result.problem) }
+            }
+        }
+    }
+
+    /** The "Install" button, shown once the update is downloaded (e.g. after allowing installs). */
+    fun installUpdate() = startUpdateInstall()
+
+    private fun startUpdateInstall() {
+        val file = downloadedUpdate?.takeIf { it.exists() }
+        if (file == null) {
+            _state.update { it.copy(updateReady = false) }
+            return
+        }
+        val app = getApplication<Application>()
+        when (UpdateInstaller.install(app, file)) {
+            UpdateInstaller.InstallStart.OPENED -> _state.update { it.copy(updateNeedsPermission = false) }
+            UpdateInstaller.InstallStart.NEEDS_PERMISSION -> {
+                _state.update { it.copy(updateNeedsPermission = true) }
+                UpdateInstaller.openInstallPermissionSettings(app)
+            }
+        }
     }
 
     fun checkForUpdateOnStart() {

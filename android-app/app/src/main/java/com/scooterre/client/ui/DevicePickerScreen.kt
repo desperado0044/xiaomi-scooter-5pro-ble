@@ -80,7 +80,7 @@ fun DevicePickerScreen(
             }
         }
 
-        state.availableUpdate?.let { UpdateBanner(it, s, Modifier.padding(top = 8.dp)) }
+        state.availableUpdate?.let { UpdateBanner(it, state, s, Modifier.padding(top = 8.dp)) }
 
         if (state.knownDevices.isNotEmpty()) {
             DocumentsTile(state.documentCounts.values.sum(), s) { onOpenDocuments(null) }

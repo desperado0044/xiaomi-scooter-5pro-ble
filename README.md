@@ -148,6 +148,9 @@ disclaimer).
 - **Insurance plate reminder** (optional, off by default, Germany): notifications one month, one week and on
   the last day before the plate expires at the end of February, with a "New insurance applied for" button
   in the notification (or a checkbox in the documents) to stop them. No connection to the scooter needed.
+- **Update button**: when a newer release exists, the notice offers "Download update": the app downloads the APK from
+  this project's GitHub release page, checks its checksum and signature and opens the system installer, where you
+  confirm. Nothing is ever installed silently. (Google Play Protect may offer to scan a new version once.)
 - The back gesture steps outward: close menu → overview → clean disconnect to the device list →
   leave the app. There is also a "Disconnect" button.
 

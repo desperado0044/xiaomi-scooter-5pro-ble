@@ -144,7 +144,10 @@ fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
         onSetInsuranceApplied = viewModel::setInsuranceApplied,
     )
 
-    CompositionLocalProvider(LocalUnits provides state.units) {
+    CompositionLocalProvider(
+        LocalUnits provides state.units,
+        LocalUpdateActions provides UpdateActions(viewModel::downloadUpdate, viewModel::installUpdate),
+    ) {
         ScooterTheme(darkTheme = dark) {
             Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 if (state.locked) {

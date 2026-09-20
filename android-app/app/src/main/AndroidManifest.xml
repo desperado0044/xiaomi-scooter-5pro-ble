@@ -11,6 +11,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Android 13+: needed to show the optional insurance-plate reminders. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Lets the "Download update" button open the system installer (the user still confirms). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
 
     <!-- Lets the documents screen find the phone's default camera app (Android 11+ package visibility). -->
@@ -50,6 +52,11 @@
                 <data android:scheme="scooterre" android:host="login" />
             </intent-filter>
         </activity>
+
+        <!-- Result of an app update installed through the "Download update" button. -->
+        <receiver
+            android:name=".update.UpdateInstallReceiver"
+            android:exported="false" />
 
         <!-- The "new insurance applied for" button of the insurance-plate reminder notification. -->
         <receiver
