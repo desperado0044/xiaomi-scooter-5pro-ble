@@ -7,40 +7,6 @@
 
 ---
 
-## Screenshots
-
-Links die deutsche, rechts die englische Oberfläche — die App schaltet per Knopfdruck um.
-*Left the German, right the English UI — the app switches language at the tap of a button.*
-(Beispieldaten, MAC-Adressen entfernt / sample data, MAC addresses removed.)
-
-**Geräteliste mit Dokumente-Kachel · Device list with documents tile**
-
-![Geräteliste / Device list](docs/screenshots/01-device-list.png)
-
-**Übersicht · Overview**
-
-![Übersicht / Overview](docs/screenshots/02-overview.png)
-
-**Dokumente pro Scooter · Documents per scooter**
-
-![Dokumente / Documents](docs/screenshots/03-documents.png)
-
-**Vorzeige-Ansicht (Musterdokument) · Show-it view (sample document)**
-
-![Vorzeige-Ansicht / Viewer](docs/screenshots/04-document-viewer.png)
-
-**App-Einstellungen · App settings**
-
-![App-Einstellungen / App settings](docs/screenshots/05-app-settings.png)
-
-**Seitenmenü und Export-Dialog (englische Oberfläche; das Feld mit dem Zugangscode ist ausgeblendet) · Side menu and export dialog (English UI; the access-code field is hidden)**
-
-![Menü und Export / Menu and export](docs/screenshots/06-menu-and-export.png)
-
-**Fahrt-Zuordnung nach dem Verbinden (englische Oberfläche) · Ride-mode prompt after connecting (English UI)**
-
-![Fahrt-Zuordnung / Ride-mode prompt](docs/screenshots/07-ride-prompt.png)
-
 ---
 
 ## Deutsch
@@ -129,6 +95,17 @@ Fassung dieses Ausschlusses).
 - **Reifenwartung**: Erinnerung ein/aus und Intervall (14–180 Tage) einstellbar.
 - **Homescreen-Widget** mit dem letzten Stand (Akku, Sperre, Reichweite).
 
+<p align="center">
+  <img src="docs/screenshots/02-overview.png" width="560" alt="Übersicht / Overview"><br>
+  <em>Übersicht — links deutsch, rechts englisch (die App schaltet per Knopfdruck um)</em>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/06-side-menu.png" width="250" alt="Seitenmenü / Side menu">
+  <img src="docs/screenshots/07-ride-prompt.png" width="400" alt="Fahrt-Zuordnung / Ride prompt"><br>
+  <em>Seitenmenü und die Frage nach dem Fahrmodus nach dem Verbinden (englische Oberfläche)</em>
+</p>
+
 **Dokumente pro Scooter** (offline, ohne Verbindung zum Scooter)
 
 - Kachel „Dokumente" ganz oben in der Geräteliste plus „📄 N"-Button an jeder Scooter-Karte.
@@ -138,6 +115,12 @@ Fassung dieses Ausschlusses).
   ergänzen.
 - **Vorzeige-Ansicht**: Vollbild, Blättern, Zoom, Bildschirm bleibt an, volle Helligkeit; PDFs
   Seite für Seite. Umbenennen und Löschen mit Rückfrage.
+
+<p align="center">
+  <img src="docs/screenshots/03-documents.png" width="560" alt="Dokumente / Documents">
+  <img src="docs/screenshots/04-document-viewer.png" width="560" alt="Vorzeige-Ansicht / Viewer"><br>
+  <em>Dokumente pro Scooter und die Vorzeige-Ansicht mit einem Musterdokument (links deutsch, rechts englisch)</em>
+</p>
 
 **Mehrere Scooter, Export und Import**
 
@@ -151,6 +134,12 @@ Fassung dieses Ausschlusses).
   auch für Konten ohne eigenes Xiaomi-Passwort, z.B. bei Google-Anmeldung), BLE-Scan ohne
   bekannte MAC-Adresse, automatischer Bezug des BLE-Schlüssels (`ltmk`).
 
+<p align="center">
+  <img src="docs/screenshots/01-device-list.png" width="560" alt="Geräteliste / Device list">
+  <img src="docs/screenshots/08-export-dialog.png" width="300" alt="Export-Dialog / Export dialog"><br>
+  <em>Geräteliste mit Dokumente-Kachel (links deutsch, rechts englisch) und der Export-Dialog (Zugangscode-Feld ausgeblendet)</em>
+</p>
+
 **App-Einstellungen** (auch ohne verbundenen Scooter erreichbar)
 
 - Sprache (Deutsch/Englisch), Design (System/Hell/Dunkel), automatische Helligkeit per
@@ -160,6 +149,11 @@ Fassung dieses Ausschlusses).
   eine neuere Version, abschaltbar).
 - Die Zurück-Geste geht stufenweise: Menü schließen → Übersicht → sauber trennen zur
   Geräteliste → App beenden. Zusätzlich gibt es den „Trennen"-Button.
+
+<p align="center">
+  <img src="docs/screenshots/05-app-settings.png" width="560" alt="App-Einstellungen / App settings"><br>
+  <em>App-Einstellungen (links deutsch, rechts englisch)</em>
+</p>
 
 **Technik**: persistente BLE-Sitzung (keine Neuverbindung pro Abfrage) mit automatischem
 Wiederholungsversuch bei kurzzeitigen Verbindungsproblemen.
@@ -293,6 +287,17 @@ disclaimer).
 - **Tire maintenance**: reminder on/off and interval (14–180 days) settable.
 - **Home-screen widget** with the last known status (battery, lock, range).
 
+<p align="center">
+  <img src="docs/screenshots/02-overview.png" width="560" alt="Übersicht / Overview"><br>
+  <em>Overview — German on the left, English on the right (the app switches language at the tap of a button)</em>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/06-side-menu.png" width="250" alt="Seitenmenü / Side menu">
+  <img src="docs/screenshots/07-ride-prompt.png" width="400" alt="Fahrt-Zuordnung / Ride prompt"><br>
+  <em>Side menu and the riding-mode question after connecting</em>
+</p>
+
 **Documents per scooter** (offline, no connection to the scooter needed)
 
 - A "Documents" tile at the top of the device list plus a "📄 N" button on every scooter card.
@@ -301,6 +306,12 @@ disclaimer).
   photos become **one** multi-page document, more pages can be added later.
 - **Show-it view**: full screen, paging, zoom, screen stays on, full brightness; PDFs page by
   page. Rename and delete with confirmation.
+
+<p align="center">
+  <img src="docs/screenshots/03-documents.png" width="560" alt="Dokumente / Documents">
+  <img src="docs/screenshots/04-document-viewer.png" width="560" alt="Vorzeige-Ansicht / Viewer"><br>
+  <em>Documents per scooter and the show-it view with a sample document (German left, English right)</em>
+</p>
 
 **Multiple scooters, export and import**
 
@@ -314,6 +325,12 @@ disclaimer).
   for accounts without a separate Xiaomi password, e.g. Google sign-in), BLE scan without
   knowing the MAC address, automatic retrieval of the BLE key (`ltmk`).
 
+<p align="center">
+  <img src="docs/screenshots/01-device-list.png" width="560" alt="Geräteliste / Device list">
+  <img src="docs/screenshots/08-export-dialog.png" width="300" alt="Export-Dialog / Export dialog"><br>
+  <em>Device list with the documents tile (German left, English right) and the export dialog (access-code field hidden)</em>
+</p>
+
 **App settings** (also reachable without a connected scooter)
 
 - Language (German/English), theme (system/light/dark), automatic brightness via the light sensor
@@ -322,6 +339,11 @@ disclaimer).
   update notice (checks GitHub once a day for a newer version, can be turned off).
 - The back gesture steps outward: close menu → overview → clean disconnect to the device list →
   leave the app. There is also a "Disconnect" button.
+
+<p align="center">
+  <img src="docs/screenshots/05-app-settings.png" width="560" alt="App-Einstellungen / App settings"><br>
+  <em>App settings (German left, English right)</em>
+</p>
 
 **Under the hood**: persistent BLE session (no reconnect per request) with automatic retry on
 transient connection issues.
