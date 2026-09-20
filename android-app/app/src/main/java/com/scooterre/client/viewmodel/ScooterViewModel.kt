@@ -14,6 +14,7 @@ import com.scooterre.client.cloud.PinRequiredException
 import com.scooterre.client.cloud.QrLoginStart
 import com.scooterre.client.cloud.XiaomiCloudClient
 import com.scooterre.client.protocol.BatteryHistoryStore
+import com.scooterre.client.protocol.DeviceBundle
 import com.scooterre.client.protocol.DeviceExport
 import com.scooterre.client.protocol.DeviceRegistry
 import com.scooterre.client.protocol.DocumentStore
@@ -132,6 +133,7 @@ data class UiState(
     // person authorized on the same physical scooter (e.g. a spouse) can add it on their phone
     // without repeating the cloud login/PIN dance.
     val exportCode: String? = null,
+    val exportMac: String? = null,
     val importText: String = "",
     // Set right after a fresh connect if the odometer/battery moved meaningfully since the last
     // time this device was seen - the app has no background service, so it cannot know which
@@ -425,7 +427,10 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     fun forgetDevice(mac: String) {
         secureStore.clearLtmk(mac)
         deviceRegistry.remove(mac)
+        documentStore.deleteAll(mac)
+        batteryHistoryStore.clear(mac)
         _state.update { it.copy(knownDevices = deviceRegistry.list()) }
+        refreshDocuments()
     }
 
     /** Sets a user-chosen label for a saved device - the only way to tell two same-model-table
@@ -442,10 +447,10 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     fun exportDevice(mac: String) {
         val device = deviceRegistry.list().firstOrNull { it.mac.equals(mac, ignoreCase = true) } ?: return
         val ltmk = secureStore.loadLtmk(mac) ?: return
-        _state.update { it.copy(exportCode = DeviceExport.encode(device, ltmk)) }
+        _state.update { it.copy(exportCode = DeviceExport.encode(device, ltmk), exportMac = device.mac) }
     }
 
-    fun dismissExportCode() = _state.update { it.copy(exportCode = null) }
+    fun dismissExportCode() = _state.update { it.copy(exportCode = null, exportMac = null) }
 
     fun onImportTextChanged(text: String) = _state.update { it.copy(importText = text) }
 
@@ -468,6 +473,25 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
                 knownDevices = deviceRegistry.list(),
                 screen = Screen.DEVICE_PICKER,
             )
+        }
+    }
+
+    /** Imports an export bundle file (key, name, documents, history); [password] is needed for an
+     * encrypted one. */
+    fun importBundle(uri: Uri, password: String?) {
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching { getApplication<Application>().contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
+                    ?.let { DeviceBundle.import(getApplication(), it, password) }
+            }
+            when (result) {
+                is DeviceBundle.ImportResult.Ok -> {
+                    _state.update { it.copy(importText = "", error = null, knownDevices = deviceRegistry.list(), screen = Screen.DEVICE_PICKER) }
+                    refreshDocuments()
+                }
+                DeviceBundle.ImportResult.BadPassword -> _state.update { it.copy(error = s.importWrongPasswordError) }
+                else -> _state.update { it.copy(error = s.importInvalidCodeError) }
+            }
         }
     }
 
@@ -740,7 +764,10 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         val mac = _state.value.macAddress
         secureStore.clearLtmk(mac)
         deviceRegistry.remove(mac)
+        documentStore.deleteAll(mac)
+        batteryHistoryStore.clear(mac)
         _state.update { it.copy(hasSavedLtmk = false, knownDevices = deviceRegistry.list()) }
+        refreshDocuments()
     }
 
     fun refreshAll() = launchBusy(s.readingValuesBusy) {

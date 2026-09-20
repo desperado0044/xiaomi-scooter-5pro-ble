@@ -94,6 +94,29 @@ class DocumentStore(private val context: Context) {
         return doc
     }
 
+    /** Restores one document from an export bundle; [open] returns the stream of a page by file name.
+     * A document with the same id is left untouched; a half-restored one is removed again. */
+    fun restore(mac: String, doc: ScooterDocument, open: (String) -> InputStream?) {
+        if (list(mac).any { it.id == doc.id }) return
+        val dir = docDir(mac, doc.id).apply { mkdirs() }
+        try {
+            doc.pages.forEach { page ->
+                val input = open(page) ?: error("missing page $page")
+                input.use { src -> File(dir, page).outputStream().use { src.copyTo(it) } }
+            }
+        } catch (e: Exception) {
+            dir.deleteRecursively()
+            return
+        }
+        save(mac, list(mac) + doc)
+    }
+
+    /** Removes every document of a scooter (used when the scooter is forgotten). */
+    fun deleteAll(mac: String) {
+        File(context.filesDir, "documents/" + mac.replace(":", "").uppercase()).deleteRecursively()
+        prefs.edit().remove(key(mac)).apply()
+    }
+
     fun rename(mac: String, docId: String, name: String) {
         save(mac, list(mac).map { if (it.id == docId) it.copy(name = name) else it })
     }

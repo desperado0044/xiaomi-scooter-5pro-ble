@@ -110,6 +110,18 @@ class BatteryHistoryStore(context: Context) {
         prefs.edit().remove(KEY_REF_PREFIX + mac).remove(KEY_TOTALS_PREFIX + mac).apply()
     }
 
+    /** The raw stored JSON (reference point, per-mode totals) for an export bundle. */
+    fun exportRaw(mac: String): Pair<String?, String?> =
+        prefs.getString(KEY_REF_PREFIX + mac, null) to prefs.getString(KEY_TOTALS_PREFIX + mac, null)
+
+    /** Restores an exported history - but never overwrites one this phone already has. */
+    fun importRaw(mac: String, reference: String?, totals: String?) {
+        val edit = prefs.edit()
+        if (reference != null && prefs.getString(KEY_REF_PREFIX + mac, null) == null) edit.putString(KEY_REF_PREFIX + mac, reference)
+        if (totals != null && prefs.getString(KEY_TOTALS_PREFIX + mac, null) == null) edit.putString(KEY_TOTALS_PREFIX + mac, totals)
+        edit.apply()
+    }
+
     private fun saveTotals(mac: String, totals: Map<Long, ModeEfficiencyTotals>) {
         val o = JSONObject()
         for ((m, t) in totals) o.put(m.toString(), JSONObject().put("km", t.totalKm).put("wh", t.totalWh))

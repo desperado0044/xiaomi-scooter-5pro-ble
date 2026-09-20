@@ -20,6 +20,17 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.core.content.FileProvider
+import com.scooterre.client.protocol.DeviceBundle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -50,19 +61,7 @@ fun DevicePickerScreen(
 ) {
     val s = strings(state.language)
     val context = LocalContext.current
-    // Saving to a file sidesteps re-typing/pasting a long code by hand entirely - useful when the
-    // two phones can be connected to the same PC/cloud-drive folder, or just to avoid a messaging
-    // app mangling a long pasted string. The launcher must be created unconditionally here (Compose
-    // rule), so the actual text to write is stashed in this remembered var until the picker result
-    // comes back.
-    var pendingExportWrite by remember { mutableStateOf<String?>(null) }
-    val saveFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
-        val text = pendingExportWrite
-        pendingExportWrite = null
-        if (uri != null && text != null) {
-            context.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray(Charsets.UTF_8)) }
-        }
-    }
+    val scope = rememberCoroutineScope()
     // A saved key can only be replaced by logging in again (cloud/PIN) - "Vergessen" is
     // deliberately not a single one-tap action so a misplaced tap can't silently strand a device.
     var pendingForget by remember { mutableStateOf<KnownDevice?>(null) }
@@ -182,17 +181,69 @@ fun DevicePickerScreen(
         )
     }
 
-    state.exportCode?.let { code ->
+    state.exportMac?.let { exportMac ->
+        val code = state.exportCode ?: return@let
+        var password by remember(exportMac) { mutableStateOf("") }
+        var working by remember(exportMac) { mutableStateOf(false) }
+        val fileLabel = (state.knownDevices.firstOrNull { it.mac.equals(exportMac, ignoreCase = true) }?.name ?: "scooter")
+            .replace(Regex("[^A-Za-z0-9._-]"), "_")
+        val saveBundleLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+            if (uri != null) {
+                scope.launch {
+                    working = true
+                    withContext(Dispatchers.IO) {
+                        context.contentResolver.openOutputStream(uri)?.use { DeviceBundle.export(context, exportMac, it, password) }
+                    }
+                    working = false
+                }
+            }
+        }
         AlertDialog(
             onDismissRequest = onDismissExportCode,
             title = { Text(s.exportDialogTitle) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        s.exportDialogHint,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(s.exportDialogHint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    Text(s.exportBundleLabel, style = MaterialTheme.typography.titleSmall)
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = { Text(s.exportPasswordLabel) },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(),
                     )
+                    Text(s.exportPasswordHint, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row {
+                        TextButton(enabled = !working, onClick = { saveBundleLauncher.launch("scooter-$fileLabel.zip") }) { Text(s.saveAsFileButton) }
+                        TextButton(
+                            enabled = !working,
+                            onClick = {
+                                scope.launch {
+                                    working = true
+                                    val file = withContext(Dispatchers.IO) {
+                                        val dir = File(context.cacheDir, "export").apply { mkdirs(); listFiles()?.forEach { it.delete() } }
+                                        File(dir, "scooter-$fileLabel.zip").also { f ->
+                                            f.outputStream().use { DeviceBundle.export(context, exportMac, it, password) }
+                                        }
+                                    }
+                                    working = false
+                                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                                    val intent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "application/zip"
+                                        putExtra(Intent.EXTRA_STREAM, uri)
+                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                    }
+                                    context.startActivity(Intent.createChooser(intent, s.shareButton))
+                                }
+                            },
+                        ) { Text(s.shareButton) }
+                    }
+                    HorizontalDivider()
+                    Text(s.exportCodeLabel, style = MaterialTheme.typography.titleSmall)
                     OutlinedTextField(
                         value = code,
                         onValueChange = {},
@@ -200,24 +251,16 @@ fun DevicePickerScreen(
                         label = { Text(s.exportDeviceButton) },
                         modifier = Modifier.fillMaxWidth(),
                     )
-                }
-            },
-            confirmButton = {
-                Row {
-                    TextButton(onClick = {
-                        pendingExportWrite = code
-                        saveFileLauncher.launch("scooter-zugang.txt")
-                    }) { Text(s.saveAsFileButton) }
                     TextButton(onClick = {
                         val intent = Intent(Intent.ACTION_SEND).apply {
                             type = "text/plain"
                             putExtra(Intent.EXTRA_TEXT, code)
                         }
                         context.startActivity(Intent.createChooser(intent, s.shareButton))
-                    }) { Text(s.shareButton) }
+                    }) { Text(s.shareCodeButton) }
                 }
             },
-            dismissButton = { TextButton(onClick = onDismissExportCode) { Text(s.cancelButton) } },
+            confirmButton = { TextButton(onClick = onDismissExportCode) { Text(s.closeButton) } },
         )
     }
 }

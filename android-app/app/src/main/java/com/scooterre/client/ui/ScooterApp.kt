@@ -102,6 +102,7 @@ fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
                         onBackToPicker = viewModel::openDevicePicker,
                         onImportTextChanged = viewModel::onImportTextChanged,
                         onImportDevice = viewModel::importDevice,
+                        onImportBundle = viewModel::importBundle,
                     )
                     Screen.DASHBOARD -> DashboardScreen(
                         state = state,

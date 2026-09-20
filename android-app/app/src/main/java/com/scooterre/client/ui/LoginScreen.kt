@@ -3,6 +3,7 @@ package com.scooterre.client.ui
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
+import com.scooterre.client.protocol.DeviceBundle
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.browser.customtabs.CustomTabsIntent
@@ -58,6 +59,7 @@ fun LoginScreen(
     onBackToPicker: () -> Unit,
     onImportTextChanged: (String) -> Unit,
     onImportDevice: () -> Unit,
+    onImportBundle: (Uri, String?) -> Unit,
 ) {
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -65,12 +67,43 @@ fun LoginScreen(
     val s = strings(state.language)
     // Reading an exported file straight in avoids re-typing/pasting a long code by hand - the
     // file's whole content becomes the import text field's value, same as pasting it would.
+    // An export bundle (ZIP, maybe encrypted) is imported as a whole; anything else is read as the
+    // text export code and put into the import field, as if pasted.
+    var pendingBundle by remember { mutableStateOf<Uri?>(null) }
+    var bundlePassword by remember { mutableStateOf("") }
     val pickFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
-            val text = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                ?.toString(Charsets.UTF_8)
-            if (text != null) onImportTextChanged(text.trim())
+            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            when (bytes?.let(DeviceBundle::kindOf)) {
+                DeviceBundle.Kind.ENCRYPTED -> {
+                    bundlePassword = ""
+                    pendingBundle = uri
+                }
+                DeviceBundle.Kind.PLAIN -> onImportBundle(uri, null)
+                else -> bytes?.toString(Charsets.UTF_8)?.let { onImportTextChanged(it.trim()) }
+            }
         }
+    }
+    pendingBundle?.let { uri ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { pendingBundle = null },
+            title = { Text(s.importPasswordTitle) },
+            text = {
+                OutlinedTextField(
+                    value = bundlePassword,
+                    onValueChange = { bundlePassword = it },
+                    label = { Text(s.importPasswordLabel) },
+                    singleLine = true,
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                )
+            },
+            confirmButton = {
+                TextButton(enabled = bundlePassword.isNotEmpty(), onClick = { onImportBundle(uri, bundlePassword); pendingBundle = null }) {
+                    Text(s.importButton)
+                }
+            },
+            dismissButton = { TextButton(onClick = { pendingBundle = null }) { Text(s.cancelButton) } },
+        )
     }
 
     Column(
@@ -106,7 +139,7 @@ fun LoginScreen(
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             OutlinedButton(
-                onClick = { pickFileLauncher.launch("text/plain") },
+                onClick = { pickFileLauncher.launch("*/*") },
                 enabled = !state.busy,
                 modifier = Modifier.weight(1f),
             ) { Text(s.pickFileButton) }
@@ -115,6 +148,12 @@ fun LoginScreen(
                 enabled = !state.busy && state.importText.isNotBlank(),
                 modifier = Modifier.weight(1f),
             ) { Text(s.importButton) }
+        }
+        // Import problems show right here - the general error line at the bottom of this long
+        // screen would be out of sight.
+        val importErrors = setOf(s.importWrongPasswordError, s.importInvalidCodeError)
+        state.error?.takeIf { it in importErrors }?.let {
+            Text("${s.errorPrefix}$it", color = MaterialTheme.colorScheme.error)
         }
         HorizontalDivider()
 
@@ -270,7 +309,7 @@ fun LoginScreen(
             }
         }
 
-        state.error?.let {
+        state.error?.takeUnless { it in importErrors }?.let {
             Text("${s.errorPrefix}$it", color = MaterialTheme.colorScheme.error)
         }
     }
