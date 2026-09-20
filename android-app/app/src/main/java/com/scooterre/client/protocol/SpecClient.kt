@@ -276,7 +276,7 @@ object SpecProfiles {
     )
 
     /** CONFIRMED identical to the 5 Pro's table, not just assumed - live-verified 2026-09-19 via a
-     * per-property GET sweep from a PC BLE adapter against a physical 5 Max (MAC AA:BB:CC:DD:EE:FF):
+     * per-property GET sweep from a PC BLE adapter against a physical 5 Max:
      * 20 properties spanning every siid (1,2,3,4,6) all returned correct, plausible values
      * (REMAINING_MILEAGE=60.5km matching the model's official 60km-range spec, ENERGY_RECOVERY's
      * 30/60/90 enum, TIRE_MAINTENANCE/MORE_BATTERY_INFO/LOG_1 all decoding in the exact same
