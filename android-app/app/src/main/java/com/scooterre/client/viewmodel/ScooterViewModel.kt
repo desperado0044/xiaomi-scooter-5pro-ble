@@ -440,9 +440,9 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
      * see reference/SCOOTER_5_PRO/research/REPORT.md §33-34's `61 30 0A` push-frame analysis)
      * rather than an arbitrary faster number: the underlying values don't update at the source any
      * faster than that, so polling quicker would just re-read the same stale number sooner.
-     * Once stopped/parked, it falls back to the full ~19s sweep as before - batching multiple
-     * properties into one BLE request would be the real way to speed the full sweep up further,
-     * not attempted here (see project memory's still-open batching item). */
+     * Once stopped/parked, it falls back to the full ~19s sweep as before. Batching several
+     * properties into one request is not an option: the scooter answers only the first object of
+     * a multi-object GET and returns error records for the rest (verified live, 2026-09-20). */
     private fun startAutoRefresh() {
         autoRefreshJob?.cancel()
         autoRefreshJob = viewModelScope.launch {

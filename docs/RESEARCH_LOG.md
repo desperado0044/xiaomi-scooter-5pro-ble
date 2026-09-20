@@ -603,3 +603,15 @@ Generation). Plausibel angesichts der 1:1-Übereinstimmung zwischen Pro und Max,
 solches Gerät verfügbar ist. Der App-Code behandelt ein unbekanntes Modell ohnehin per
 Fallback wie den 5 Pro (`SpecProfiles.forModel()`), ohne dass das extra kodiert werden
 müsste.
+
+## 2026-09-20: Mehrfachabfrage (Batching) ist auf dieser Firmware nicht möglich
+
+Live gegen den 5 Max (Notebook-BLE-Adapter, nur lesend, ein GET-Frame mit 1, 2 und 3 Objekten
+`(1,2)`, `(1,4)`, `(1,5)`): Nur das **erste** Objekt kommt als gültiges Ergebnis zurück
+(`BATTERY_LEVEL=100`), alle weiteren als Fehlereinträge (`status=0xf05d` bzw. `0xf05f`, ohne
+sinnvolles siid/piid-Echo, kürzer als ein Erfolgseintrag). Das deckt sich mit den drei
+Experimenten des Referenzprojekts (`reference/SCOOTER_5_PRO/docs/BLE.md`: "Устройство
+обслуживает только ПЕРВЫЙ объект в запросе"). Der frühere "Müll" beim 19-Objekte-Versuch war
+teilweise ein Parser-Desync (Fehlereinträge sind 5 Byte, nicht 7+len), die zugrundeliegende
+Grenze ist aber real. Konsequenz: eine Property pro Request bleibt Pflicht; der Vollabruf (~9 s)
+lässt sich nicht bündeln, nur der kleine Fahr-Refresh (7 Properties, ~2,5 s) ist schnell genug.
