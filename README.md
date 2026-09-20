@@ -72,6 +72,9 @@ Fassung dieses Ausschlusses).
   Umgang mit diesen personenbezogenen Daten bist du selbst verantwortlich. Ob eine digitale Kopie
   bei einer Kontrolle akzeptiert wird, entscheidet die kontrollierende Stelle — das ist keine
   Rechtsberatung; im Zweifel die Originale mitführen.
+- **Sicherung und App-Sperre.** Ohne das Passwort lässt sich eine Sicherung nicht wiederherstellen — es
+  gibt keine Rücksetzung. Die App-Sperre schützt vor zufälligem Zugriff auf die App-Oberfläche, ist aber
+  keine Garantie gegen gezielte Angriffe auf das Handy.
 - **Kein Support, keine Zusicherung von Weiterentwicklung.**
   Xiaomi kann das Protokoll jederzeit per Firmware-Update ändern und diese Software funktionsunfähig
   machen, ohne dass eine Aktualisierung dieses Repositories zu erwarten ist.
@@ -130,6 +133,9 @@ Fassung dieses Ausschlusses).
   einer Datei, optional mit einem frei wählbaren Passwort verschlüsselt (AES-256). Der Import
   erkennt die Datei selbst und fragt bei Bedarf nach dem Passwort. Daneben gibt es weiter den
   kurzen Text-Code (nur Schlüssel) für den schnellen Fall.
+- **Gesamtsicherung** aller Scooter in **einer** verschlüsselten Datei (Schlüssel, Dokumente, Verlauf und
+  App-Einstellungen; Passwort Pflicht, AES-256) unter App-Einstellungen → Sicherung. Wiederherstellen
+  führt zusammen; die App-Einstellungen lassen sich dabei abwählen.
 - Anmeldung direkt in der App: Cloud-Login (Passwort **oder** QR-Code über Chrome Custom Tabs —
   auch für Konten ohne eigenes Xiaomi-Passwort, z.B. bei Google-Anmeldung), BLE-Scan ohne
   bekannte MAC-Adresse, automatischer Bezug des BLE-Schlüssels (`ltmk`).
@@ -147,6 +153,9 @@ Fassung dieses Ausschlusses).
   im Stand, automatisch mit dem zuletzt genutzten Scooter verbinden, Bestätigung vor
   Sperren/Entsperren, Fahrten-Abfrage ein/aus, Update-Hinweis (prüft einmal täglich GitHub auf
   eine neuere Version, abschaltbar).
+- **App-Sperre** (optional, standardmäßig aus): fragt beim Start der App nach Fingerabdruck oder
+  Geräte-PIN. Sie greift nur beim App-Start — nach dem Wechsel in den Hintergrund bleibt die
+  laufende App entsperrt, und das Widget ist nicht geschützt.
 - Die Zurück-Geste geht stufenweise: Menü schließen → Übersicht → sauber trennen zur
   Geräteliste → App beenden. Zusätzlich gibt es den „Trennen"-Button.
 
@@ -170,6 +179,8 @@ Wiederholungsversuch bei kurzzeitigen Verbindungsproblemen.
 4. Dokumente: Kachel „Dokumente" → Scannen, Fotos oder Datei.
 5. Zweites Handy (z.B. Familie): am ersten Handy „Exportieren", Datei teilen, am zweiten
    „Scooter hinzufügen" → „Datei auswählen".
+6. Neues Handy: in den App-Einstellungen unter „Sicherung" eine Sicherung erstellen (Passwort gut
+   merken), die Datei aufs neue Handy übertragen und dort „Wiederherstellen" wählen.
 
 ### Lizenz
 
@@ -263,6 +274,9 @@ disclaimer).
   original camera photos do stay in your gallery, though. You are responsible for handling this
   personal data. Whether a digital copy is accepted at a check is up to the checking authority —
   this is not legal advice; carry the originals if in doubt.
+- **Backup and app lock.** Without the password a backup cannot be restored — there is no reset. The app
+  lock protects against casual access to the app's interface, but is no guarantee against targeted attacks
+  on the phone.
 - **No support, no promise of continued development.** Xiaomi can
   change the protocol at any time via a firmware update and render this software non-functional,
   with no update to this repository to be expected.
@@ -321,6 +335,9 @@ disclaimer).
   file, optionally encrypted with a password of your choice (AES-256). Import recognizes the file
   by itself and asks for the password if needed. The short text code (key only) remains for the
   quick case.
+- **Full backup** of all scooters in **one** encrypted file (keys, documents, history and app settings;
+  password required, AES-256) under App settings → Backup. Restoring merges; the app settings can be
+  deselected while restoring.
 - Sign-in directly in the app: cloud login (password **or** QR code via Chrome Custom Tabs — also
   for accounts without a separate Xiaomi password, e.g. Google sign-in), BLE scan without
   knowing the MAC address, automatic retrieval of the BLE key (`ltmk`).
@@ -337,6 +354,9 @@ disclaimer).
   (experimental), keep screen on, units (metric/imperial), refresh while parked, connect
   automatically to the last used scooter, confirmation before lock/unlock, ride prompt on/off,
   update notice (checks GitHub once a day for a newer version, can be turned off).
+- **App lock** (optional, off by default): asks for fingerprint or device PIN when the app starts. It
+  only applies at app start — a running app stays unlocked when it goes to the background, and the
+  widget is not protected.
 - The back gesture steps outward: close menu → overview → clean disconnect to the device list →
   leave the app. There is also a "Disconnect" button.
 
@@ -359,6 +379,8 @@ transient connection issues.
 4. Documents: "Documents" tile → Scan, Photos or File.
 5. Second phone (e.g. family): on the first phone "Export", share the file, on the second
    "Add scooter" → "Choose file".
+6. New phone: in the app settings under "Backup" create a backup (remember the password), move the
+   file to the new phone and choose "Restore" there.
 
 ### License
 
