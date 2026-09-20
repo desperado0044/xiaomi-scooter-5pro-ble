@@ -2,6 +2,9 @@
 
 **[Deutsch](#deutsch) | [English](#english)**
 
+**Alternative Android-App für den Xiaomi Electric Scooter 5 Pro / 5 Max — Dashboard, Fahrmodi, Sperre, Akku- und Fahrdaten direkt per Bluetooth, ohne Mi-Home-App.**
+*An alternative Android app for the Xiaomi Electric Scooter 5 Pro / 5 Max — dashboard, ride modes, lock, battery and ride data over Bluetooth Low Energy, no Mi Home app needed.*
+
 ---
 
 ## Deutsch
