@@ -187,20 +187,13 @@ fun DashboardScreen(
         if (drawerState.isOpen) scope.launch { drawerState.close() } else selectedSection = DashboardSection.OVERVIEW
     }
 
-    // Optional safety net (see settings): lock/unlock and riding-mode changes ask once first.
+    // Optional safety net (see settings): lock/unlock changes ask once first.
     var pendingConfirm by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
     val guardedSetBool: (SpecProperty, Boolean) -> Unit = { property, value ->
         if (state.confirmCritical && property.name == "IS_LOCKED") {
             pendingConfirm = propertyName(property.name, state.language) to { onSetBool(property, value) }
         } else {
             onSetBool(property, value)
-        }
-    }
-    val guardedSetNumeric: (SpecProperty, Long) -> Unit = { property, value ->
-        if (state.confirmCritical && property.name == "RIDING_MODE") {
-            pendingConfirm = propertyName(property.name, state.language) to { onSetNumeric(property, value) }
-        } else {
-            onSetNumeric(property, value)
         }
     }
 
@@ -296,7 +289,7 @@ fun DashboardScreen(
             } else if (selectedSection == DashboardSection.HISTORY) {
                 HistoryTabContent(state, s, onResetHistory)
             } else if (selectedSection == DashboardSection.OVERVIEW) {
-                OverviewContent(state, s, profile, propertiesByName, guardedSetBool, guardedSetNumeric, onSetString)
+                OverviewContent(state, s, profile, propertiesByName, guardedSetBool, onSetNumeric, onSetString)
             } else {
                 val activeNames = namesFor(selectedSection, profile).orEmpty()
                 val activeProperties = activeNames.mapNotNull { propertiesByName[it] }
@@ -314,7 +307,7 @@ fun DashboardScreen(
                     modifier = Modifier.padding(top = 12.dp, bottom = 16.dp),
                 ) {
                     items(activeProperties, key = { it.name }) { property ->
-                        PropertyRow(property, state.values[property.name], state.language, profile, guardedSetBool, guardedSetNumeric, onSetString)
+                        PropertyRow(property, state.values[property.name], state.language, profile, guardedSetBool, onSetNumeric, onSetString)
                     }
                 }
             }
@@ -432,7 +425,7 @@ private fun OverviewContent(
         // glance at during or right around a ride, so the Overview answers "how's the ride going"
         // on its own without switching to Ride/Battery/Vehicle - not just a login-time summary.
         listOf(
-            "IS_RIDING", "CURRENT_MILEAGE", "AVERAGE_SPEED", "HIGHEST_SPEED", "RIDING_TIME",
+            "ENERGY_RECOVERY", "IS_RIDING", "CURRENT_MILEAGE", "AVERAGE_SPEED", "HIGHEST_SPEED", "RIDING_TIME",
             "IS_LOCKED", "BLUETOOTH_CAR_SEARCH", "FAULT",
         ).forEach { name ->
             propertiesByName[name]?.let { property ->
