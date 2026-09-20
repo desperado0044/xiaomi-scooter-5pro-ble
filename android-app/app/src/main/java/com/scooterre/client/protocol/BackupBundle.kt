@@ -78,10 +78,11 @@ object BackupBundle {
         val zipBytes = BundleCrypto.decrypt(data, password) ?: return RestoreResult.BadPassword
         return try {
             val entries = mutableMapOf<String, ByteArray>()
+            val budget = ZipBudget()
             ZipInputStream(ByteArrayInputStream(zipBytes)).use { zip ->
                 while (true) {
                     val e = zip.nextEntry ?: break
-                    if (!e.isDirectory) entries[e.name] = zip.readBytes()
+                    if (!e.isDirectory) entries[e.name] = zip.readBytesWithin(budget)
                 }
             }
             val manifest = JSONObject(String(entries["manifest.json"] ?: return RestoreResult.Invalid, Charsets.UTF_8))

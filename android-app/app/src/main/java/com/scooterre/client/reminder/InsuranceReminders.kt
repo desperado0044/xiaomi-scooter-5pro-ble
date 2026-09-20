@@ -162,6 +162,10 @@ object InsuranceReminders {
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setContentIntent(pending)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(
+                NotificationCompat.Builder(context, CHANNEL_ID).setSmallIcon(R.drawable.ic_notification).setContentTitle(title).build(),
+            )
             .addAction(0, s.insuranceActionApplied, appliedPending)
             .setAutoCancel(true)
             .build()

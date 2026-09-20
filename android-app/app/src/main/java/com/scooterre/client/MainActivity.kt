@@ -57,7 +57,7 @@ class MainActivity : FragmentActivity() {
         val uri = intent?.data ?: return
         if (uri.scheme != "scooterre") return
         // A locked app must not import keys or open screens before the user has unlocked it.
-        viewModel.runWhenUnlocked { handleDeepLink(uri) }
+        viewModel.runWhenUnlocked { runCatching { handleDeepLink(uri) } }
     }
 
     private fun handleDeepLink(uri: android.net.Uri) {
@@ -65,7 +65,7 @@ class MainActivity : FragmentActivity() {
             "import" -> {
                 val fileName = uri.getQueryParameter("file")
                 val code = if (fileName != null) {
-                    java.io.File(getExternalFilesDir(null), fileName).readText(Charsets.UTF_8)
+                    java.io.File(getExternalFilesDir(null), java.io.File(fileName).name).readText(Charsets.UTF_8)
                 } else {
                     uri.getQueryParameter("code") ?: return
                 }
