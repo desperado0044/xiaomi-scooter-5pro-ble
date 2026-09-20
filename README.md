@@ -11,7 +11,7 @@
 
 ## Deutsch
 
-Ein eigenständiger, quelloffener Android-Client für **Xiaomi Electric Scooter** der 5er-Reihe
+Ein eigenständiger Android-Client mit einsehbarem Quellcode (nicht-kommerzielle Lizenz) für **Xiaomi Electric Scooter** der 5er-Reihe
 (getestet: 5 Pro und 5 Max; der normale 5 sollte ebenfalls laufen), der das Fahrzeug direkt per Bluetooth Low Energy anspricht — ohne
 die offizielle Mi-Home-App. Das komplette BLE-Auth-Protokoll (ECDH P-256 → HKDF-SHA256 →
 AES-CCM) wurde durch eigene Reverse-Engineering-Arbeit nachvollzogen und ist Byte für Byte
@@ -48,7 +48,8 @@ Fassung dieses Ausschlusses).
 - **Getestet am Xiaomi Electric Scooter 5 Pro und 5 Max** (BLE-Chip RTL8762C, Firmware
   2.7.0_0015.x). Der normale **Electric Scooter 5** (ohne „Pro"/„Max") **sollte ebenfalls
   funktionieren**, wurde aber nicht getestet — die App verwendet für nicht erkannte
-  Modelle die 5-Pro-Tabelle. Erfahrungsberichte dazu sind willkommen (z.B. als Issue).
+  Modelle die 5-Pro-Tabelle. Erfahrungsberichte sind willkommen — am einfachsten über das
+  [Kompatibilitätsbericht-Formular](https://github.com/desperado0044/xiaomi-scooter-5pro-ble/issues/new?template=compatibility_report.yml).
 - **Keine Geschwindigkeitsbegrenzung wird umgangen.** Dieses Projekt implementiert bewusst
   **keine** Funktion zum Ändern der regionalen Geschwindigkeitsbegrenzung oder zum Beschreiben
   der Motorsteuerungs-Firmware — das würde physischen ST-Link/SWD-Zugriff auf den Motorcontroller
@@ -193,7 +194,9 @@ Wiederholungsversuch bei kurzzeitigen Verbindungsproblemen.
 [PolyForm Noncommercial License 1.0.0](LICENSE) — freie Nutzung, Weitergabe und Veränderung für
 **jeden nicht-kommerziellen Zweck** (privat, Forschung, Lehre, Hobby). Kommerzielle Nutzung,
 egal ob als Open- oder Closed-Source-Produkt, ist **nicht** gestattet. Das ist bewusst so
-gewählt: niemand soll mit dieser Arbeit Geld verdienen, weder ich noch sonst wer.
+gewählt: niemand soll mit dieser Arbeit Geld verdienen, weder ich noch sonst wer. Wegen dieser
+Einschränkung ist das Projekt „source-available", aber keine Open-Source-Lizenz im Sinne der
+OSI-Definition.
 
 ### Danksagung / Grundlagen
 
@@ -230,7 +233,7 @@ Zertifikat-SHA-256 der offiziellen Releases ab 2.2:
 
 ## English
 
-A standalone, open-source Android client for **Xiaomi Electric Scooter** 5-series models
+A standalone Android client with public source code (non-commercial license) for **Xiaomi Electric Scooter** 5-series models
 (tested: 5 Pro and 5 Max; the standard 5 should work too) that talks to the vehicle directly over Bluetooth Low Energy —
 without the official Mi Home app. The complete BLE auth protocol (ECDH P-256 → HKDF-SHA256 →
 AES-CCM) was reverse-engineered from scratch and is verified byte-for-byte against both real
@@ -266,7 +269,8 @@ disclaimer).
 - **Tested on the Xiaomi Electric Scooter 5 Pro and 5 Max** (BLE chip RTL8762C, firmware
   2.7.0_0015.x). The standard **Electric Scooter 5** (without "Pro"/"Max") **should work as
   well**, but it has not been tested — for models the app does not recognize it uses the
-  5 Pro's property table. Reports about this are welcome (e.g. as an issue).
+  5 Pro's property table. Reports are welcome — the easiest way is the
+  [compatibility report form](https://github.com/desperado0044/xiaomi-scooter-5pro-ble/issues/new?template=compatibility_report.yml).
 - **No speed limiter is bypassed.** This project deliberately implements **no** function to
   change the regional speed limit or to flash the motor-controller firmware — that would require
   physical ST-Link/SWD access to the motor controller and was intentionally not built, regardless
@@ -403,7 +407,8 @@ transient connection issues.
 [PolyForm Noncommercial License 1.0.0](LICENSE) — free to use, share, and modify for **any
 non-commercial purpose** (personal, research, teaching, hobby). Commercial use, whether as an
 open- or closed-source product, is **not** permitted. This is a deliberate choice: nobody should
-make money off this work, not me and not anyone else.
+make money off this work, not me and not anyone else. Because of this restriction the project is
+source-available, but not open source in the sense of the OSI definition.
 
 ### Acknowledgments / Foundations
 

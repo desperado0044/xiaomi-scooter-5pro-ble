@@ -1,0 +1,57 @@
+name: Compatibility report / Kompatibilitätsbericht
+description: Does the app work with your scooter? Tell us the model and what worked (English or German).
+title: "[Compatibility] "
+labels: ["compatibility"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing! / Danke fürs Testen!
+
+        **Please do NOT post** your scooter's MAC address, access keys, PIN, export codes or files, or screenshots that show them.
+        Bitte **keine** MAC-Adresse, Schlüssel, PIN, Exportcodes/-dateien oder Screenshots davon posten.
+  - type: dropdown
+    id: model
+    attributes:
+      label: Scooter model / Modell
+      options:
+        - Xiaomi Electric Scooter 5
+        - Xiaomi Electric Scooter 5 Pro
+        - Xiaomi Electric Scooter 5 Max
+        - Other (please describe below)
+    validations:
+      required: true
+  - type: input
+    id: firmware
+    attributes:
+      label: Scooter firmware version / Firmware-Version
+      description: Shown in the Xiaomi Home app under device info.
+      placeholder: e.g. 2.7.0_0015.xxxx
+  - type: input
+    id: app_version
+    attributes:
+      label: App version / App-Version
+      description: App settings, About section.
+      placeholder: e.g. 2.2
+    validations:
+      required: true
+  - type: input
+    id: phone
+    attributes:
+      label: Phone model and Android version / Handy und Android-Version
+      placeholder: e.g. Pixel 8, Android 15
+  - type: checkboxes
+    id: worked
+    attributes:
+      label: What worked? / Was hat funktioniert?
+      options:
+        - label: Getting access (cloud login or import)
+        - label: Connecting over Bluetooth
+        - label: Dashboard values (battery, range, speed)
+        - label: Switching ride modes
+        - label: Locking / unlocking
+        - label: Other settings (lights, cruise control, regeneration, ...)
+  - type: textarea
+    id: notes
+    attributes:
+      label: Details / what did not work / Was hat nicht funktioniert?
