@@ -33,6 +33,14 @@ Links die deutsche, rechts die englische Oberfläche — die App schaltet per Kn
 
 ![App-Einstellungen / App settings](docs/screenshots/05-app-settings.png)
 
+**Seitenmenü und Export-Dialog (englische Oberfläche; das Feld mit dem Zugangscode ist ausgeblendet) · Side menu and export dialog (English UI; the access-code field is hidden)**
+
+![Menü und Export / Menu and export](docs/screenshots/06-menu-and-export.png)
+
+**Fahrt-Zuordnung nach dem Verbinden (englische Oberfläche) · Ride-mode prompt after connecting (English UI)**
+
+![Fahrt-Zuordnung / Ride-mode prompt](docs/screenshots/07-ride-prompt.png)
+
 ---
 
 ## Deutsch
