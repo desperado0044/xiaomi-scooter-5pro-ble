@@ -48,6 +48,7 @@ internal val KEY_LOCKED = booleanPreferencesKey("is_locked")
 internal val KEY_REMAINING_KM = doublePreferencesKey("remaining_km")
 internal val KEY_TIMESTAMP = longPreferencesKey("timestamp")
 internal val KEY_LANG = stringPreferencesKey("lang")
+internal val KEY_DISTANCE_UNIT = stringPreferencesKey("distance_unit")
 
 // Widget-background navy, matching the app's own dark theme (ui/Theme.kt) rather than Glance's
 // default system surface color - keeps the widget visually part of the same app.
@@ -79,6 +80,7 @@ class ScooterWidget : GlanceAppWidget() {
                 batteryLevel = prefs[KEY_BATTERY] ?: -1L,
                 isLocked = prefs[KEY_LOCKED],
                 remainingKm = prefs[KEY_REMAINING_KM],
+                distanceUnit = prefs[KEY_DISTANCE_UNIT] ?: "km",
                 timestampMillis = prefs[KEY_TIMESTAMP] ?: 0L,
                 lang = prefs[KEY_LANG] ?: "DE",
             )
@@ -98,6 +100,7 @@ private fun WidgetContent(
     batteryLevel: Long,
     isLocked: Boolean?,
     remainingKm: Double?,
+    distanceUnit: String,
     timestampMillis: Long,
     lang: String,
 ) {
@@ -144,7 +147,7 @@ private fun WidgetContent(
                     Text("📍", style = TextStyle(fontSize = 13.sp))
                     Spacer(modifier = GlanceModifier.width(4.dp))
                     Text(
-                        "${(it * 10).roundToInt() / 10.0} km",
+                        "${(it * 10).roundToInt() / 10.0} $distanceUnit",
                         style = TextStyle(color = ColorProvider(Color(0xFFB8C0D8), Color(0xFFB8C0D8)), fontSize = 11.sp),
                     )
                 }

@@ -93,7 +93,31 @@ data class AppStrings(
     val keepScreenOnHint: String,
     val themeLabel: String,
     val themeSystem: String,
-    val themeAuto: String,
+    val autoBrightnessLabel: String,
+    val autoBrightnessHint: String,
+    val settingsLanguageLabel: String,
+    val autoConnectLabel: String,
+    val autoConnectHint: String,
+    val refreshRateLabel: String,
+    val refreshRateHint: String,
+    val refreshEconomy: String,
+    val refreshNormal: String,
+    val refreshFast: String,
+    val unitsLabel: String,
+    val unitsMetric: String,
+    val unitsImperial: String,
+    val confirmCriticalLabel: String,
+    val confirmCriticalHint: String,
+    val confirmChangeTitle: String,
+    val confirmChangeText: (String) -> String,
+    val confirmChangeButton: String,
+    val rideTrackingLabel: String,
+    val rideTrackingHint: String,
+    val aboutLabel: String,
+    val aboutVersion: (String) -> String,
+    val aboutBody: String,
+    val aboutGithubButton: String,
+    val deviceListMenu: String,
     val themeLight: String,
     val themeDark: String,
     val exportRideLogButton: String,
@@ -182,15 +206,15 @@ val STRINGS_DE = AppStrings(
     sectionOverview = "Übersicht",
     menuContentDescription = "Menü",
     pendingRideTitle = "Fahrmodus seit letztem Mal?",
-    pendingRideBody = { km, wh, since -> "Seit deiner letzten Verbindung ($since) bist du $km km gefahren und hast $wh Wh verbraucht. In welchem Modus überwiegend?" },
-    pendingRideBodyNoSince = { km, wh -> "Seit deiner letzten Verbindung bist du $km km gefahren und hast $wh Wh verbraucht. In welchem Modus überwiegend?" },
+    pendingRideBody = { km, wh, since -> "Seit deiner letzten Verbindung ($since) bist du $km gefahren und hast $wh Wh verbraucht. In welchem Modus überwiegend?" },
+    pendingRideBodyNoSince = { km, wh -> "Seit deiner letzten Verbindung bist du $km gefahren und hast $wh Wh verbraucht. In welchem Modus überwiegend?" },
     pendingRideSkipButton = "Weiß nicht / ignorieren",
     resetHistoryButton = "Verlauf zurücksetzen",
     resetHistoryConfirmTitle = "Verlauf wirklich zurücksetzen?",
     resetHistoryConfirmText = "Alle bisher aufgezeichneten Kilometer und der Verbrauch pro Modus werden gelöscht - das lässt sich nicht rückgängig machen. Sinnvoll z.B. nach einem Akkutausch.",
     noHistoryYetText = "Noch keine Fahrten aufgezeichnet - das baut sich mit der Zeit auf, jedes Mal wenn du dich mit dem Scooter verbindest.",
-    historyKmDrivenFormat = { mode, km -> "Gefahrene km ($mode): $km" },
-    historyWhPerKmFormat = { whPerKm -> "Verbrauch: $whPerKm Wh/km" },
+    historyKmDrivenFormat = { mode, dist -> "Gefahrene Strecke ($mode): $dist" },
+    historyWhPerKmFormat = { consumption -> "Verbrauch: $consumption" },
     noRidesYet = "Noch keine aufgezeichneten Fahrten",
     regionWarningTitle = "Rechtlicher Hinweis",
     regionWarningConfirmSuffix = " Mit dem Aktivieren bestätigst du, dass du die Verantwortung dafür übernimmst.",
@@ -204,7 +228,31 @@ val STRINGS_DE = AppStrings(
     keepScreenOnHint = "Solange der Scooter verbunden ist und die App im Vordergrund bleibt.",
     themeLabel = "Design",
     themeSystem = "System",
-    themeAuto = "Auto (Umgebungslicht)",
+    autoBrightnessLabel = "Helligkeit automatisch",
+    autoBrightnessHint = "Passt die Bildschirmhelligkeit an das Umgebungslicht an, solange die App offen ist - hell bei Sonne, gedimmt im Dunkeln.",
+    settingsLanguageLabel = "Sprache",
+    autoConnectLabel = "Automatisch verbinden",
+    autoConnectHint = "Beim App-Start direkt mit dem zuletzt genutzten Scooter verbinden. Die Zurück-Geste führt zur Geräteliste.",
+    refreshRateLabel = "Aktualisierung im Stand",
+    refreshRateHint = "Wie oft alle Werte neu gelesen werden, solange der Scooter steht. Beim Fahren sind es immer etwa 2,5 Sekunden.",
+    refreshEconomy = "Sparsam (ca. 40 s)",
+    refreshNormal = "Normal (ca. 20 s)",
+    refreshFast = "Schnell (ca. 12 s)",
+    unitsLabel = "Einheiten",
+    unitsMetric = "Metrisch (km, km/h, °C)",
+    unitsImperial = "Imperial (mi, mph, °F)",
+    confirmCriticalLabel = "Vor Sperren/Entsperren und Moduswechsel bestätigen",
+    confirmCriticalHint = "Fragt kurz nach, damit nichts versehentlich umgeschaltet wird.",
+    confirmChangeTitle = "Wirklich ändern?",
+    confirmChangeText = { name -> "\"$name\" jetzt ändern?" },
+    confirmChangeButton = "Ändern",
+    rideTrackingLabel = "Fahrten-Abfrage nach dem Verbinden",
+    rideTrackingHint = "Fragt nach dem Verbinden, in welchem Modus du gefahren bist, und führt daraus den Verbrauchs-Verlauf.",
+    aboutLabel = "Über diese App",
+    aboutVersion = { v -> "Version $v" },
+    aboutBody = "Privates Hobbyprojekt, keine Verbindung zu Xiaomi. Nutzung auf eigenes Risiko, ohne Gewähr. Lizenz: PolyForm Noncommercial 1.0.0.",
+    aboutGithubButton = "Projekt auf GitHub",
+    deviceListMenu = "Geräteliste",
     themeLight = "Hell",
     themeDark = "Dunkel",
     exportRideLogButton = "Fahrtenbuch exportieren",
@@ -292,15 +340,15 @@ val STRINGS_EN = AppStrings(
     sectionOverview = "Overview",
     menuContentDescription = "Menu",
     pendingRideTitle = "Riding mode since last time?",
-    pendingRideBody = { km, wh, since -> "Since your last connection ($since), you've ridden $km km and used $wh Wh. Mostly which mode?" },
-    pendingRideBodyNoSince = { km, wh -> "Since your last connection, you've ridden $km km and used $wh Wh. Mostly which mode?" },
+    pendingRideBody = { km, wh, since -> "Since your last connection ($since), you've ridden $km and used $wh Wh. Mostly which mode?" },
+    pendingRideBodyNoSince = { km, wh -> "Since your last connection, you've ridden $km and used $wh Wh. Mostly which mode?" },
     pendingRideSkipButton = "Don't know / skip",
     resetHistoryButton = "Reset history",
     resetHistoryConfirmTitle = "Really reset the history?",
     resetHistoryConfirmText = "All recorded distance and consumption per mode will be deleted - this can't be undone. Useful e.g. after a battery replacement.",
     noHistoryYetText = "No rides recorded yet - this builds up over time, every time you connect to the scooter.",
-    historyKmDrivenFormat = { mode, km -> "Distance ridden ($mode): $km" },
-    historyWhPerKmFormat = { whPerKm -> "Consumption: $whPerKm Wh/km" },
+    historyKmDrivenFormat = { mode, dist -> "Distance ridden ($mode): $dist" },
+    historyWhPerKmFormat = { consumption -> "Consumption: $consumption" },
     noRidesYet = "No recorded rides yet",
     regionWarningTitle = "Legal Notice",
     regionWarningConfirmSuffix = " By enabling this, you confirm that you take responsibility for it.",
@@ -314,7 +362,31 @@ val STRINGS_EN = AppStrings(
     keepScreenOnHint = "While the scooter is connected and the app stays in the foreground.",
     themeLabel = "Theme",
     themeSystem = "System",
-    themeAuto = "Auto (ambient light)",
+    autoBrightnessLabel = "Automatic brightness",
+    autoBrightnessHint = "Adapts the screen brightness to the ambient light while the app is open - bright in sun, dimmed in the dark.",
+    settingsLanguageLabel = "Language",
+    autoConnectLabel = "Connect automatically",
+    autoConnectHint = "On app start, connect straight to the last used scooter. The back gesture leads to the device list.",
+    refreshRateLabel = "Refresh while parked",
+    refreshRateHint = "How often all values are re-read while the scooter is standing. While riding it is always about every 2.5 seconds.",
+    refreshEconomy = "Economy (~40 s)",
+    refreshNormal = "Normal (~20 s)",
+    refreshFast = "Fast (~12 s)",
+    unitsLabel = "Units",
+    unitsMetric = "Metric (km, km/h, °C)",
+    unitsImperial = "Imperial (mi, mph, °F)",
+    confirmCriticalLabel = "Confirm lock/unlock and riding-mode changes",
+    confirmCriticalHint = "Asks once so nothing gets switched by accident.",
+    confirmChangeTitle = "Really change?",
+    confirmChangeText = { name -> "Change \"$name\" now?" },
+    confirmChangeButton = "Change",
+    rideTrackingLabel = "Ride prompt after connecting",
+    rideTrackingHint = "After connecting, asks which mode you rode in and builds the consumption history from that.",
+    aboutLabel = "About this app",
+    aboutVersion = { v -> "Version $v" },
+    aboutBody = "Private hobby project, not affiliated with Xiaomi. Use at your own risk, no warranty. License: PolyForm Noncommercial 1.0.0.",
+    aboutGithubButton = "Project on GitHub",
+    deviceListMenu = "Device list",
     themeLight = "Light",
     themeDark = "Dark",
     exportRideLogButton = "Export ride log",
@@ -563,7 +635,7 @@ fun formatMoreBatteryInfo2(raw: String, lang: Lang): String {
 /** One ride-history slot (LOG_1..LOG_5, siid=6) is a concatenation of 16-digit decimal records
  * "[duration*10 min:4][distance*10 km:4][avg-speed*10 kmh:4][top-speed*10 kmh:4]", all-zero
  * records are empty slots. Ported from the reference plugin's ride_records()/_fmt_ride_record(). */
-fun formatRideLog(raw: String, lang: Lang): String {
+fun formatRideLog(raw: String, lang: Lang, units: UnitSystem = UnitSystem.METRIC): String {
     val s = raw.trim()
     val records = mutableListOf<String>()
     var i = 0
@@ -585,11 +657,13 @@ fun formatRideLog(raw: String, lang: Lang): String {
         } else {
             if (lang == Lang.DE) "${durMin.toInt()} min" else "${durMin.toInt()} min"
         }
-        val dist = "%.1f".format(locale, distTenths / 10.0)
-        val avg = "%.1f".format(locale, avgTenths / 10.0)
-        val top = "%.1f".format(locale, topTenths / 10.0)
-        records += if (lang == Lang.DE) "$durText, $dist km, ø $avg km/h, max $top km/h"
-        else "$durText, $dist km, avg $avg km/h, top $top km/h"
+        val dist = "%.1f".format(locale, units.distance(distTenths / 10.0))
+        val avg = "%.1f".format(locale, units.speed(avgTenths / 10.0))
+        val top = "%.1f".format(locale, units.speed(topTenths / 10.0))
+        val du = units.distanceUnit
+        val su = units.speedUnit
+        records += if (lang == Lang.DE) "$durText, $dist $du, ø $avg $su, max $top $su"
+        else "$durText, $dist $du, avg $avg $su, top $top $su"
     }
     return if (records.isEmpty()) strings(lang).noRidesYet else records.joinToString("; ")
 }

@@ -17,6 +17,7 @@ object ScooterWidgetUpdater {
         batteryLevel: Long?,
         isLocked: Boolean?,
         remainingKm: Double?,
+        distanceUnit: String,
         lang: String,
     ) {
         val manager = GlanceAppWidgetManager(context)
@@ -32,6 +33,7 @@ object ScooterWidgetUpdater {
                 if (remainingKm != null) prefs[KEY_REMAINING_KM] = remainingKm else prefs.remove(KEY_REMAINING_KM)
                 prefs[KEY_TIMESTAMP] = System.currentTimeMillis()
                 prefs[KEY_LANG] = lang
+                prefs[KEY_DISTANCE_UNIT] = distanceUnit
             }
             widget.update(context, id)
         }

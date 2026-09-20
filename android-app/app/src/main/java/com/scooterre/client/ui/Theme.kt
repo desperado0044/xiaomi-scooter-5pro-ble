@@ -1,25 +1,11 @@
 package com.scooterre.client.ui
 
-import android.content.Context
-import android.hardware.Sensor
-import android.hardware.SensorEvent
-import android.hardware.SensorEventListener
-import android.hardware.SensorManager
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 
 // A small, coherent Material 3 palette built around one accent (electric-scooter blue/teal)
 // instead of the unstyled default MaterialTheme (flat white, no hierarchy). Light/dark variants
@@ -67,53 +53,5 @@ fun ScooterTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composabl
     )
 }
 
-/** SYSTEM follows the phone's dark-mode setting; AUTO picks light/dark from the ambient light
- * sensor (bright daylight -> light theme, readable in sun; otherwise dark). */
-enum class ThemeMode { SYSTEM, AUTO, LIGHT, DARK }
-
-// Two thresholds (hysteresis) so a lux value hovering near one limit doesn't flicker the theme.
-// Typical readings: indoors 50-500 lx, overcast outdoors ~1000-5000 lx, direct sun 20000+ lx.
-private const val BRIGHT_ON_LUX = 1500f
-private const val BRIGHT_OFF_LUX = 500f
-
-/** True = bright surroundings, false = dim, null = not measuring (disabled or no light sensor).
- * The sensor is only registered while the app is in the foreground. */
-@Composable
-fun rememberAmbientBright(enabled: Boolean): Boolean? {
-    val context = LocalContext.current
-    val lifecycle = LocalLifecycleOwner.current.lifecycle
-    var bright by remember { mutableStateOf<Boolean?>(null) }
-    DisposableEffect(enabled, lifecycle) {
-        val manager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        val sensor = manager.getDefaultSensor(Sensor.TYPE_LIGHT)
-        if (!enabled || sensor == null) {
-            bright = null
-            return@DisposableEffect onDispose {}
-        }
-        val listener = object : SensorEventListener {
-            override fun onSensorChanged(event: SensorEvent) {
-                val lux = event.values[0]
-                bright = when {
-                    lux >= BRIGHT_ON_LUX -> true
-                    lux <= BRIGHT_OFF_LUX -> false
-                    else -> bright ?: false
-                }
-            }
-
-            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
-        }
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_RESUME -> manager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_NORMAL)
-                Lifecycle.Event.ON_PAUSE -> manager.unregisterListener(listener)
-                else -> {}
-            }
-        }
-        lifecycle.addObserver(observer)
-        onDispose {
-            lifecycle.removeObserver(observer)
-            manager.unregisterListener(listener)
-        }
-    }
-    return bright
-}
+/** SYSTEM follows the phone's dark-mode setting; LIGHT/DARK force one look. */
+enum class ThemeMode { SYSTEM, LIGHT, DARK }

@@ -30,6 +30,9 @@ import com.scooterre.client.protocol.SpecType
 import com.scooterre.client.protocol.encodeValue
 import com.scooterre.client.ui.Lang
 import com.scooterre.client.ui.ThemeMode
+import com.scooterre.client.ui.UnitSystem
+import com.scooterre.client.ui.distance
+import com.scooterre.client.ui.distanceUnit
 import com.scooterre.client.ui.modelDisplayName
 import com.scooterre.client.ui.propertyName
 import com.scooterre.client.ui.strings
@@ -51,6 +54,13 @@ private const val KEY_LAST_MAC = "last_mac"
 private const val KEY_LANG = "lang"
 private const val KEY_THEME_MODE = "theme_mode"
 private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
+private const val KEY_AUTO_BRIGHTNESS = "auto_brightness"
+private const val KEY_UNITS = "units"
+private const val KEY_AUTO_CONNECT = "auto_connect"
+private const val KEY_LAST_CONNECTED = "last_connected_mac"
+private const val KEY_REFRESH_RATE = "refresh_rate"
+private const val KEY_CONFIRM_CRITICAL = "confirm_critical"
+private const val KEY_RIDE_TRACKING = "ride_tracking"
 
 /** Polled every ~2.5s (see [ScooterViewModel.startAutoRefresh]) while actually riding, instead of
  * the full ~50-property table - small enough that one pass stays well inside that window even
@@ -61,6 +71,9 @@ private val RIDE_PRIORITY_PROPERTIES = setOf(
     "IS_RIDING", "AVERAGE_SPEED", "CURRENT_MILEAGE", "BATTERY_LEVEL", "REMAINING_MILEAGE", "RIDING_TIME", "RIDING_MODE",
 )
 
+/** Pause between full property sweeps while parked (a sweep itself takes ~9s on top). */
+enum class RefreshRate(val idleDelayMs: Long) { ECONOMY(30_000L), NORMAL(10_000L), FAST(3_000L) }
+
 enum class Screen { LOGIN, DASHBOARD, DEVICE_PICKER }
 
 data class UiState(
@@ -68,6 +81,12 @@ data class UiState(
     val language: Lang = Lang.DE,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val keepScreenOn: Boolean = true,
+    val autoBrightness: Boolean = false,
+    val units: UnitSystem = UnitSystem.METRIC,
+    val autoConnect: Boolean = false,
+    val refreshRate: RefreshRate = RefreshRate.NORMAL,
+    val confirmCritical: Boolean = false,
+    val rideTracking: Boolean = true,
     val macAddress: String = DEFAULT_SCOOTER_MAC,
     // Preferably the name from the Xiaomi cloud account (finishCloudLogin), falling back to the
     // BLE-advertised name if picked from a scan, or null for a generic label in the dashboard.
@@ -140,6 +159,12 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
                 themeMode = runCatching { ThemeMode.valueOf(prefs.getString(KEY_THEME_MODE, null) ?: "SYSTEM") }
                     .getOrDefault(ThemeMode.SYSTEM),
                 keepScreenOn = prefs.getBoolean(KEY_KEEP_SCREEN_ON, true),
+                autoBrightness = prefs.getBoolean(KEY_AUTO_BRIGHTNESS, false),
+                units = runCatching { UnitSystem.valueOf(prefs.getString(KEY_UNITS, null) ?: "METRIC") }.getOrDefault(UnitSystem.METRIC),
+                autoConnect = prefs.getBoolean(KEY_AUTO_CONNECT, false),
+                refreshRate = runCatching { RefreshRate.valueOf(prefs.getString(KEY_REFRESH_RATE, null) ?: "NORMAL") }.getOrDefault(RefreshRate.NORMAL),
+                confirmCritical = prefs.getBoolean(KEY_CONFIRM_CRITICAL, false),
+                rideTracking = prefs.getBoolean(KEY_RIDE_TRACKING, true),
                 knownDevices = known,
             )
         }
@@ -153,6 +178,57 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     fun setThemeMode(mode: ThemeMode) {
         prefs.edit().putString(KEY_THEME_MODE, mode.name).apply()
         _state.update { it.copy(themeMode = mode) }
+    }
+
+    fun setAutoBrightness(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_AUTO_BRIGHTNESS, enabled).apply()
+        _state.update { it.copy(autoBrightness = enabled) }
+    }
+
+    fun setLanguage(lang: Lang) {
+        prefs.edit().putString(KEY_LANG, lang.name).apply()
+        _state.update { it.copy(language = lang) }
+    }
+
+    fun setUnits(units: UnitSystem) {
+        prefs.edit().putString(KEY_UNITS, units.name).apply()
+        _state.update { it.copy(units = units) }
+        pushWidgetUpdate()
+    }
+
+    fun setRefreshRate(rate: RefreshRate) {
+        prefs.edit().putString(KEY_REFRESH_RATE, rate.name).apply()
+        _state.update { it.copy(refreshRate = rate) }
+    }
+
+    fun setAutoConnect(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_AUTO_CONNECT, enabled).apply()
+        _state.update { it.copy(autoConnect = enabled) }
+    }
+
+    fun setConfirmCritical(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_CONFIRM_CRITICAL, enabled).apply()
+        _state.update { it.copy(confirmCritical = enabled) }
+    }
+
+    fun setRideTracking(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_RIDE_TRACKING, enabled).apply()
+        _state.update { it.copy(rideTracking = enabled) }
+    }
+
+    private var autoConnectAttempted = false
+
+    /** Called once per process start (not on every recomposition, and not again after the user
+     * disconnects to the device list) - with the setting on, connects straight to the scooter
+     * that was last connected successfully. */
+    fun autoConnectOnStart() {
+        if (autoConnectAttempted) return
+        autoConnectAttempted = true
+        if (!_state.value.autoConnect || _state.value.screen != Screen.DEVICE_PICKER) return
+        val lastMac = prefs.getString(KEY_LAST_CONNECTED, null) ?: return
+        val device = deviceRegistry.list().firstOrNull { it.mac.equals(lastMac, ignoreCase = true) } ?: return
+        if (secureStore.loadLtmk(device.mac) == null) return
+        connectKnownDevice(device)
     }
 
     fun setKeepScreenOn(enabled: Boolean) {
@@ -428,6 +504,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
             protocol = p
             val model = _state.value.activeModel
             deviceRegistry.upsert(KnownDevice(mac = mac, model = model, name = _state.value.deviceName))
+            prefs.edit().putString(KEY_LAST_CONNECTED, mac).apply()
             _state.update {
                 it.copy(
                     screen = Screen.DASHBOARD, error = null,
@@ -466,7 +543,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         autoRefreshJob = viewModelScope.launch {
             while (true) {
                 val riding = (_state.value.values["IS_RIDING"]?.takeIf { it.ok }?.value as? Long) == 1L
-                delay(if (riding) 2_500L else 10_000L)
+                delay(if (riding) 2_500L else _state.value.refreshRate.idleDelayMs)
                 val spec = protocol?.requireSpecClient() ?: break
                 try {
                     // Collected locally and applied in one state update at the end, instead of
@@ -548,7 +625,8 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
                 mac = state.macAddress,
                 batteryLevel = long("BATTERY_LEVEL"),
                 isLocked = long("IS_LOCKED")?.let { it == 1L },
-                remainingKm = float("REMAINING_MILEAGE")?.let { it * 0.01 },
+                remainingKm = float("REMAINING_MILEAGE")?.let { state.units.distance(it * 0.01) },
+                distanceUnit = state.units.distanceUnit,
                 lang = state.language.name,
             )
         }
@@ -562,6 +640,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
      * its own for a ride that happened while it was closed - asking beats silently guessing or
      * silently discarding the distance/energy entirely. */
     private fun checkPendingRide() {
+        if (!_state.value.rideTracking) return
         val values = _state.value.values
         fun long(name: String): Long? = values[name]?.takeIf { it.ok }?.value as? Long
         fun float(name: String): Double? = when (val v = values[name]?.takeIf { it.ok }?.value) {

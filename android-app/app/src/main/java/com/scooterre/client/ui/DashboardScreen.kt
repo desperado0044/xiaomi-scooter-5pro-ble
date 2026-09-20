@@ -1,11 +1,13 @@
 package com.scooterre.client.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,6 +19,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -46,6 +50,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -54,6 +59,7 @@ import com.scooterre.client.protocol.SpecProfile
 import com.scooterre.client.protocol.SpecProperty
 import com.scooterre.client.protocol.SpecReadResult
 import com.scooterre.client.protocol.SpecType
+import com.scooterre.client.viewmodel.RefreshRate
 import com.scooterre.client.viewmodel.UiState
 import kotlinx.coroutines.launch
 
@@ -139,7 +145,7 @@ private fun buildRideLogExportText(state: UiState, s: AppStrings): String {
     }
     val lines = listOf("LOG_1", "LOG_2", "LOG_3", "LOG_4", "LOG_5").map { name ->
         val raw = state.values[name]?.value as? String
-        val text = if (raw != null) formatRideLog(raw, state.language) else s.loadingPlaceholder
+        val text = if (raw != null) formatRideLog(raw, state.language, state.units) else s.loadingPlaceholder
         "${propertyName(name, state.language)}: $text"
     }
     return header + lines.joinToString("\n")
@@ -157,8 +163,7 @@ fun DashboardScreen(
     onAttributeRideMode: (Long) -> Unit,
     onSkipPendingRide: () -> Unit,
     onResetHistory: () -> Unit,
-    onSetThemeMode: (ThemeMode) -> Unit,
-    onSetKeepScreenOn: (Boolean) -> Unit,
+    settings: SettingsActions,
 ) {
     val s = strings(state.language)
     val profile = state.activeSpecProfile
@@ -175,6 +180,29 @@ fun DashboardScreen(
     var selectedSection by remember { mutableStateOf(DashboardSection.OVERVIEW) }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+
+    // Back gesture: close the menu first, then return to the overview; ScooterApp's own
+    // handler (disconnect to the device list) only takes over from the overview.
+    BackHandler(enabled = drawerState.isOpen || selectedSection != DashboardSection.OVERVIEW) {
+        if (drawerState.isOpen) scope.launch { drawerState.close() } else selectedSection = DashboardSection.OVERVIEW
+    }
+
+    // Optional safety net (see settings): lock/unlock and riding-mode changes ask once first.
+    var pendingConfirm by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
+    val guardedSetBool: (SpecProperty, Boolean) -> Unit = { property, value ->
+        if (state.confirmCritical && property.name == "IS_LOCKED") {
+            pendingConfirm = propertyName(property.name, state.language) to { onSetBool(property, value) }
+        } else {
+            onSetBool(property, value)
+        }
+    }
+    val guardedSetNumeric: (SpecProperty, Long) -> Unit = { property, value ->
+        if (state.confirmCritical && property.name == "RIDING_MODE") {
+            pendingConfirm = propertyName(property.name, state.language) to { onSetNumeric(property, value) }
+        } else {
+            onSetNumeric(property, value)
+        }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -196,6 +224,14 @@ fun DashboardScreen(
                         modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
                     )
                 }
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                NavigationDrawerItem(
+                    icon = { Text("\uD83D\uDCCB", fontSize = 20.sp) },
+                    label = { Text(s.deviceListMenu) },
+                    selected = false,
+                    onClick = { scope.launch { drawerState.close() }; onDisconnect() },
+                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+                )
             }
         },
     ) {
@@ -256,11 +292,11 @@ fun DashboardScreen(
             HorizontalDivider()
 
             if (selectedSection == DashboardSection.APP_SETTINGS) {
-                AppSettingsContent(state, s, onSetThemeMode, onSetKeepScreenOn)
+                AppSettingsContent(state, s, settings)
             } else if (selectedSection == DashboardSection.HISTORY) {
                 HistoryTabContent(state, s, onResetHistory)
             } else if (selectedSection == DashboardSection.OVERVIEW) {
-                OverviewContent(state, s, profile, propertiesByName, onSetBool, onSetNumeric, onSetString)
+                OverviewContent(state, s, profile, propertiesByName, guardedSetBool, guardedSetNumeric, onSetString)
             } else {
                 val activeNames = namesFor(selectedSection, profile).orEmpty()
                 val activeProperties = activeNames.mapNotNull { propertiesByName[it] }
@@ -278,7 +314,7 @@ fun DashboardScreen(
                     modifier = Modifier.padding(top = 12.dp, bottom = 16.dp),
                 ) {
                     items(activeProperties, key = { it.name }) { property ->
-                        PropertyRow(property, state.values[property.name], state.language, profile, onSetBool, onSetNumeric, onSetString)
+                        PropertyRow(property, state.values[property.name], state.language, profile, guardedSetBool, guardedSetNumeric, onSetString)
                     }
                 }
             }
@@ -287,6 +323,16 @@ fun DashboardScreen(
 
     state.pendingRideDelta?.let { delta ->
         PendingRideDialog(delta, s, state.language, onAttributeRideMode, onSkipPendingRide)
+    }
+
+    pendingConfirm?.let { (name, action) ->
+        AlertDialog(
+            onDismissRequest = { pendingConfirm = null },
+            title = { Text(s.confirmChangeTitle) },
+            text = { Text(s.confirmChangeText(name)) },
+            confirmButton = { TextButton(onClick = { pendingConfirm = null; action() }) { Text(s.confirmChangeButton) } },
+            dismissButton = { TextButton(onClick = { pendingConfirm = null }) { Text(s.cancelButton) } },
+        )
     }
 }
 
@@ -309,7 +355,8 @@ private fun OverviewContent(
 ) {
     val lang = state.language
     val remainingResult = state.values["REMAINING_MILEAGE"]
-    val remainingKm = (remainingResult?.takeIf { it.ok }?.value as? Float)?.let { it * 0.01f }
+    val units = LocalUnits.current
+    val remainingKm = (remainingResult?.takeIf { it.ok }?.value as? Float)?.let { units.distance(it * 0.01) }
     val batteryResult = state.values["BATTERY_LEVEL"]
     val batteryPct = batteryResult?.takeIf { it.ok }?.value as? Long
     val charging = (state.values["IS_CHARGING"]?.takeIf { it.ok }?.value as? Long) == 1L
@@ -329,7 +376,7 @@ private fun OverviewContent(
             BigStatCard(
                 modifier = Modifier.weight(1f),
                 value = remainingKm?.let { "%.0f".format(java.util.Locale.US, it) } ?: "–",
-                unit = "km",
+                unit = units.distanceUnit,
                 label = propertyName("REMAINING_MILEAGE", lang),
                 accent = Color(0xFF7EA6FF),
             )
@@ -420,57 +467,127 @@ private fun BigStatCard(modifier: Modifier = Modifier, value: String, unit: Stri
     }
 }
 
+data class SettingsActions(
+    val onSetLanguage: (Lang) -> Unit,
+    val onSetThemeMode: (ThemeMode) -> Unit,
+    val onSetAutoBrightness: (Boolean) -> Unit,
+    val onSetKeepScreenOn: (Boolean) -> Unit,
+    val onSetUnits: (UnitSystem) -> Unit,
+    val onSetRefreshRate: (RefreshRate) -> Unit,
+    val onSetAutoConnect: (Boolean) -> Unit,
+    val onSetConfirmCritical: (Boolean) -> Unit,
+    val onSetRideTracking: (Boolean) -> Unit,
+)
+
 @Composable
-private fun AppSettingsContent(
-    state: UiState,
-    s: AppStrings,
-    onSetThemeMode: (ThemeMode) -> Unit,
-    onSetKeepScreenOn: (Boolean) -> Unit,
+private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp), content = content)
+    }
+}
+
+@Composable
+private fun <T> SettingsRadioCard(
+    title: String,
+    hint: String?,
+    options: List<Pair<T, String>>,
+    selected: T,
+    onSelect: (T) -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        ) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
-                Text(s.themeLabel, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
-                val modes = listOf(
-                    ThemeMode.SYSTEM to s.themeSystem,
-                    ThemeMode.AUTO to s.themeAuto,
-                    ThemeMode.LIGHT to s.themeLight,
-                    ThemeMode.DARK to s.themeDark,
-                )
-                for ((mode, label) in modes) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RadioButton(selected = state.themeMode == mode, onClick = { onSetThemeMode(mode) })
-                        Text(label, style = MaterialTheme.typography.bodyLarge)
-                    }
-                }
+    SettingsCard {
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+        hint?.let {
+            Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        for ((value, label) in options) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(selected = selected == value, onClick = { onSelect(value) })
+                Text(label, style = MaterialTheme.typography.bodyLarge)
             }
         }
-        Card(
-            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    }
+}
+
+@Composable
+private fun SettingsSwitchCard(label: String, hint: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    SettingsCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                    Text(s.keepScreenOnLabel, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
-                    Text(
-                        s.keepScreenOnHint,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Switch(checked = state.keepScreenOn, onCheckedChange = onSetKeepScreenOn)
+            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                Text(label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                Text(hint, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Switch(checked = checked, onCheckedChange = onChange)
+        }
+    }
+}
+
+@Composable
+private fun AppSettingsContent(state: UiState, s: AppStrings, settings: SettingsActions) {
+    val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
+    val versionName = remember {
+        runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "?"
+    }
+    Column(
+        modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = 12.dp, bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        SettingsRadioCard(
+            title = s.settingsLanguageLabel,
+            hint = null,
+            options = listOf(Lang.DE to "Deutsch", Lang.EN to "English"),
+            selected = state.language,
+            onSelect = settings.onSetLanguage,
+        )
+        SettingsRadioCard(
+            title = s.themeLabel,
+            hint = null,
+            options = listOf(ThemeMode.SYSTEM to s.themeSystem, ThemeMode.LIGHT to s.themeLight, ThemeMode.DARK to s.themeDark),
+            selected = state.themeMode,
+            onSelect = settings.onSetThemeMode,
+        )
+        SettingsSwitchCard(s.autoBrightnessLabel, s.autoBrightnessHint, state.autoBrightness, settings.onSetAutoBrightness)
+        SettingsSwitchCard(s.keepScreenOnLabel, s.keepScreenOnHint, state.keepScreenOn, settings.onSetKeepScreenOn)
+        SettingsRadioCard(
+            title = s.unitsLabel,
+            hint = null,
+            options = listOf(UnitSystem.METRIC to s.unitsMetric, UnitSystem.IMPERIAL to s.unitsImperial),
+            selected = state.units,
+            onSelect = settings.onSetUnits,
+        )
+        SettingsRadioCard(
+            title = s.refreshRateLabel,
+            hint = s.refreshRateHint,
+            options = listOf(
+                RefreshRate.ECONOMY to s.refreshEconomy,
+                RefreshRate.NORMAL to s.refreshNormal,
+                RefreshRate.FAST to s.refreshFast,
+            ),
+            selected = state.refreshRate,
+            onSelect = settings.onSetRefreshRate,
+        )
+        SettingsSwitchCard(s.autoConnectLabel, s.autoConnectHint, state.autoConnect, settings.onSetAutoConnect)
+        SettingsSwitchCard(s.confirmCriticalLabel, s.confirmCriticalHint, state.confirmCritical, settings.onSetConfirmCritical)
+        SettingsSwitchCard(s.rideTrackingLabel, s.rideTrackingHint, state.rideTracking, settings.onSetRideTracking)
+        SettingsCard {
+            Text(s.aboutLabel, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+            Text(s.aboutVersion(versionName), style = MaterialTheme.typography.bodyMedium)
+            Text(
+                s.aboutBody,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            TextButton(onClick = { uriHandler.openUri("https://github.com/desperado0044/xiaomi-scooter-5pro-ble") }) {
+                Text(s.aboutGithubButton)
             }
         }
     }
@@ -480,6 +597,7 @@ private fun AppSettingsContent(
 private fun HistoryTabContent(state: UiState, s: AppStrings, onResetHistory: () -> Unit) {
     var showResetConfirm by remember { mutableStateOf(false) }
     val locale = if (state.language == Lang.DE) java.util.Locale.GERMANY else java.util.Locale.US
+    val units = LocalUnits.current
     Column(modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (state.efficiencyTotals.isEmpty()) {
             Text(
@@ -500,12 +618,12 @@ private fun HistoryTabContent(state: UiState, s: AppStrings, onResetHistory: () 
                 ) {
                     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
                         Text(
-                            s.historyKmDrivenFormat(modeLabel, "%.1f".format(locale, totals.totalKm)),
+                            s.historyKmDrivenFormat(modeLabel, "%.1f %s".format(locale, units.distance(totals.totalKm), units.distanceUnit)),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Medium,
                         )
                         Text(
-                            s.historyWhPerKmFormat("%.1f".format(locale, totals.whPerKm)),
+                            s.historyWhPerKmFormat("%.1f Wh/%s".format(locale, units.energyPerDistance(totals.whPerKm), units.distanceUnit)),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -542,7 +660,8 @@ private fun PendingRideDialog(
     onAttributeRideMode: (Long) -> Unit,
     onSkipPendingRide: () -> Unit,
 ) {
-    val kmText = "%.1f".format(java.util.Locale.US, delta.km)
+    val units = LocalUnits.current
+    val kmText = "%.1f %s".format(java.util.Locale.US, units.distance(delta.km), units.distanceUnit)
     val whText = "%.0f".format(java.util.Locale.US, delta.wh)
     val body = delta.sinceMillis?.let {
         val since = java.text.SimpleDateFormat("dd.MM. HH:mm", java.util.Locale.getDefault()).format(java.util.Date(it))
@@ -626,7 +745,7 @@ private fun PropertyRow(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        displayValue(property, result, lang, s),
+                        displayValue(property, result, lang, s, LocalUnits.current),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Medium,
                         color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
@@ -790,7 +909,14 @@ private fun NumericSetter(current: Long, setLabel: String, onSet: (Long) -> Unit
     }
 }
 
-private fun displayValue(property: SpecProperty, result: SpecReadResult?, lang: Lang, s: AppStrings): String {
+private fun convertUnits(name: String, value: Double, units: UnitSystem): Pair<Double, String?> = when (name) {
+    "TOTAL_MILEAGE", "CURRENT_MILEAGE", "REMAINING_MILEAGE" -> units.distance(value) to units.distanceUnit
+    "AVERAGE_SPEED", "HIGHEST_SPEED" -> units.speed(value) to units.speedUnit
+    "BATTERY_TEMPERATURE", "SCOOTER_TEMPERATURE" -> units.temperature(value) to units.temperatureUnit
+    else -> value to null
+}
+
+private fun displayValue(property: SpecProperty, result: SpecReadResult?, lang: Lang, s: AppStrings, units: UnitSystem): String {
     if (result == null) return s.loadingPlaceholder
     if (!result.ok) return s.errorStatusFormat(result.status)
     val v = result.value ?: return s.emptyValuePlaceholder
@@ -805,7 +931,7 @@ private fun displayValue(property: SpecProperty, result: SpecReadResult?, lang: 
     if (property.name == "TIRE_MAINTENANCE" && v is String) return formatTireMaintenance(v, lang)
     if (property.name == "MORE_BATTERY_INFO" && v is String) return formatMoreBatteryInfo(v, lang)
     if (property.name == "MORE_BATTERY_INFO_2" && v is String) return formatMoreBatteryInfo2(v, lang)
-    if (property.siid == 6 && v is String) return formatRideLog(v, lang)
+    if (property.siid == 6 && v is String) return formatRideLog(v, lang, units)
     if (hasEnumLabels(property.name)) {
         val key = v as? Long
         val label = key?.let { enumLabel(property.name, it, lang) }
@@ -818,16 +944,17 @@ private fun displayValue(property: SpecProperty, result: SpecReadResult?, lang: 
             else -> null
         }
         if (num != null) {
+            val (shown, unitOverride) = convertUnits(property.name, num.toDouble(), units)
             val text = if (scale == 1.0) {
-                num.toLong().toString()
+                Math.round(shown).toString()
             } else {
                 // Decimal separator follows the chosen app language, not the device locale -
                 // otherwise an English UI could still show "53,84" with a German-style comma.
                 val locale = if (lang == Lang.DE) java.util.Locale.GERMANY else java.util.Locale.US
                 val sep = java.text.DecimalFormatSymbols.getInstance(locale).decimalSeparator
-                "%.2f".format(locale, num).trimEnd('0').trimEnd(sep)
+                "%.2f".format(locale, shown).trimEnd('0').trimEnd(sep)
             }
-            val unit = unitSuffix(property.name, lang)
+            val unit = unitOverride ?: unitSuffix(property.name, lang)
             return if (unit != null) "$text $unit" else text
         }
     }
