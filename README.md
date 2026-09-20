@@ -7,6 +7,34 @@
 
 ---
 
+## Screenshots
+
+Links die deutsche, rechts die englische Oberfläche — die App schaltet per Knopfdruck um.
+*Left the German, right the English UI — the app switches language at the tap of a button.*
+(Beispieldaten, MAC-Adressen entfernt / sample data, MAC addresses removed.)
+
+**Geräteliste mit Dokumente-Kachel · Device list with documents tile**
+
+![Geräteliste / Device list](docs/screenshots/01-device-list.png)
+
+**Übersicht · Overview**
+
+![Übersicht / Overview](docs/screenshots/02-overview.png)
+
+**Dokumente pro Scooter · Documents per scooter**
+
+![Dokumente / Documents](docs/screenshots/03-documents.png)
+
+**Vorzeige-Ansicht (Musterdokument) · Show-it view (sample document)**
+
+![Vorzeige-Ansicht / Viewer](docs/screenshots/04-document-viewer.png)
+
+**App-Einstellungen · App settings**
+
+![App-Einstellungen / App settings](docs/screenshots/05-app-settings.png)
+
+---
+
 ## Deutsch
 
 Ein eigenständiger, quelloffener Android-Client für **Xiaomi Electric Scooter** der 5er-Reihe
@@ -56,45 +84,90 @@ Fassung dieses Ausschlusses).
 - **Cloud-Zugangsdaten und Nutzungsbedingungen.** Der Cloud-Login-Teil spricht undokumentierte,
   interne Xiaomi-Cloud-Schnittstellen an. Das kann gegen die Nutzungsbedingungen deines
   Xiaomi-Kontos verstoßen; im ungünstigsten Fall könnte das zu Einschränkungen deines Kontos
-  führen. Dein Passwort/PIN wird nirgendwo fest im Code gespeichert — Eingabe erfolgt in der App
-  und wird nur verschlüsselt über den Android Keystore lokal auf deinem Gerät abgelegt — trotzdem
+  führen. Passwort und Geräte-PIN werden nirgends fest im Code und auch nicht auf deinem Gerät
+  gespeichert — sie werden nur für den einmaligen Login bzw. Schlüsselabruf gebraucht; abgelegt wird
+  nur der daraus gewonnene BLE-Schlüssel, verschlüsselt über den Android Keystore — trotzdem
   gilt: Nutzung dieser Schnittstellen ist eigenverantwortlich. Dasselbe gilt für den exportierten
-  Zugangscode (Export/Import-Funktion): er enthält den vollständigen BLE-Schlüssel eines Geräts
-  und sollte nur an Personen weitergegeben werden, die dieses Gerät auch tatsächlich mitbenutzen
-  dürfen.
+  Zugangscode und die Exportdatei (Export/Import-Funktion): sie enthalten den vollständigen
+  BLE-Schlüssel eines Geräts (die Datei zusätzlich Dokumente und Verlauf) und sollten nur an
+  Personen weitergegeben werden, die dieses Gerät auch tatsächlich mitbenutzen dürfen — die Datei
+  am besten mit Passwort verschlüsselt.
+- **Persönliche Dokumente.** Die Dokumente-Funktion legt Fotos/PDFs deiner Unterlagen (z.B.
+  Versicherungsbestätigung) im app-privaten Speicher deines Handys ab (nicht in der Galerie,
+  unverschlüsselt); die Originalfotos der Kamera bleiben allerdings in deiner Galerie. Für den
+  Umgang mit diesen personenbezogenen Daten bist du selbst verantwortlich. Ob eine digitale Kopie
+  bei einer Kontrolle akzeptiert wird, entscheidet die kontrollierende Stelle — das ist keine
+  Rechtsberatung; im Zweifel die Originale mitführen.
 - **Kein Support, keine Zusicherung von Weiterentwicklung.**
   Xiaomi kann das Protokoll jederzeit per Firmware-Update ändern und diese Software funktionsunfähig
   machen, ohne dass eine Aktualisierung dieses Repositories zu erwarten ist.
 
 ### Funktionsumfang
 
-- **Mehrere Scooter parallel verwalten**: Geräteauswahl-Bildschirm statt eines einzelnen
-  austauschbaren Slots — beliebig viele Geräte speichern, umbenennen und (mit
-  Bestätigungsdialog) wieder vergessen.
-- **Zugang exportieren/importieren**: ein bereits eingerichteter Scooter lässt sich als Code
-  oder Datei exportieren, damit eine zweite Person (z.B. Familienmitglied) ihn auf ihrem eigenen
-  Handy direkt einrichten kann, ohne selbst Cloud-Login/PIN durchlaufen zu müssen.
-- Cloud-Login direkt in der App (Passwort **oder** QR-Code über Chrome Custom Tabs — Letzteres
-  auch für Konten ohne eigenes Xiaomi-Passwort, z.B. bei Google-Anmeldung)
-- BLE-Scan zum Auffinden des eigenen Rollers, ohne die MAC-Adresse vorher zu kennen
-- Automatischer Bezug des BLE-Sicherheitsschlüssels (`ltmk`) über die Xiaomi-Cloud-API
-- Persistente BLE-Sitzung (keine Neuverbindung bei jeder Abfrage), mit automatischem
-  Wiederholungsversuch bei kurzzeitigen Verbindungsproblemen
-- Vollständige Oberfläche auf Deutsch und Englisch umschaltbar (merkt sich die Wahl)
-- Alle bekannten MIoT-Properties in sechs Tabs, mit korrekter Einheiten-/Skalierungsanzeige und
-  Klartext statt Rohwerten wo möglich:
-  - **Fahrt**: Fahrmodus (einstellbar), Durchschnitts-/Höchstgeschwindigkeit, Gesamt-/Fahrstrecke,
-    Fahrzustand, Fehlerstatus, Restreichweite
-  - **Akku**: Akkustand, Spannung/Strom/Leistung, Akkustatus/-temperatur, Ladezyklen, Akkugesundheit
-  - **Einstellungen**: Sperre, Tempomat, Rücklicht, Rekuperationsstärke, ASR/TCS, Berg-Features,
-    Ambientelicht, Bluetooth-Suche u.a. (die meisten davon einstellbar, jeweils mit
-    Sicherheits-/Rechtshinweis bei regional heiklen Funktionen wie Tempomat und Rücklicht)
-  - **Fahrzeug**: Scootertemperatur, Schloss-Warnsignal, Reifen-Wartungserinnerung, Ruhezustand,
-    sowie ein "Scooter suchen"-Button (löst einen echten Piepton/Blinken am Gerät aus)
-  - **Identifikation**: Seriennummern, Firmware-Versionen, Produktions-/Aktivierungsdatum
-  - **Fahrtenbuch**: die letzten aufgezeichneten Fahrten des Rollers (Dauer, Distanz,
-    Durchschnitts-/Höchstgeschwindigkeit pro Fahrt)
-- Ein "Trennen"-Button für einen sauberen Verbindungsabbau statt nur App-Beenden
+**Fahren und Überblick**
+
+- **Übersicht** als Startseite nach dem Verbinden: Restreichweite und Akkustand groß, Fahrmodus
+  (Walk/Drive/Sport) und Rekuperation direkt umschaltbar, dazu Fahrzustand, Strecke, Fahrzeit,
+  Ø-/Max-Tempo, Sperre, Scooter-Suche und Fehlerstatus — alles auf einem Bildschirm.
+- **Seitenmenü** mit den Bereichen Fahrt, Akku, Einstellungen, Fahrzeug, Identifikation,
+  Fahrtenbuch, Verlauf und App-Einstellungen. Alle bekannten MIoT-Properties mit korrekter
+  Einheiten-/Skalierungsanzeige und Klartext statt Rohwerten; die meisten Einstellungen sind
+  setzbar, mit Sicherheits-/Rechtshinweis bei regional heiklen Funktionen (Tempomat, Rücklicht).
+- **Live-Werte**: automatische Aktualisierung; während der Fahrt etwa alle 2,5 s (die
+  fahrrelevanten Werte), im Stand einstellbar (sparsam/normal/schnell).
+- **Fahrtenbuch** (die letzten Fahrten des Scooters) als Datei exportierbar; **Verbrauchs-Verlauf**
+  (gefahrene km und Wh/km je Fahrmodus, experimentell): nach dem Verbinden fragt die App, in
+  welchem Modus zuletzt gefahren wurde.
+- **Reifenwartung**: Erinnerung ein/aus und Intervall (14–180 Tage) einstellbar.
+- **Homescreen-Widget** mit dem letzten Stand (Akku, Sperre, Reichweite).
+
+**Dokumente pro Scooter** (offline, ohne Verbindung zum Scooter)
+
+- Kachel „Dokumente" ganz oben in der Geräteliste plus „📄 N"-Button an jeder Scooter-Karte.
+- **Scannen** öffnet die Kamera-App deines Handys (dort z.B. den Dokumentenmodus wählen) und danach
+  die Foto-Auswahl; **Fotos** nimmt vorhandene Fotos; **Datei** importiert ein PDF oder Bild.
+  Mehrere markierte Fotos werden **ein** mehrseitiges Dokument, weitere Seiten lassen sich später
+  ergänzen.
+- **Vorzeige-Ansicht**: Vollbild, Blättern, Zoom, Bildschirm bleibt an, volle Helligkeit; PDFs
+  Seite für Seite. Umbenennen und Löschen mit Rückfrage.
+
+**Mehrere Scooter, Export und Import**
+
+- Beliebig viele Scooter parallel: speichern, umbenennen, (mit Bestätigung) vergessen — das
+  Vergessen entfernt auch die Dokumente und den Verlauf des Scooters.
+- **Export mit allem, was zum Scooter gehört** (Schlüssel, Name/Modell, Dokumente, Verlauf) in
+  einer Datei, optional mit einem frei wählbaren Passwort verschlüsselt (AES-256). Der Import
+  erkennt die Datei selbst und fragt bei Bedarf nach dem Passwort. Daneben gibt es weiter den
+  kurzen Text-Code (nur Schlüssel) für den schnellen Fall.
+- Anmeldung direkt in der App: Cloud-Login (Passwort **oder** QR-Code über Chrome Custom Tabs —
+  auch für Konten ohne eigenes Xiaomi-Passwort, z.B. bei Google-Anmeldung), BLE-Scan ohne
+  bekannte MAC-Adresse, automatischer Bezug des BLE-Schlüssels (`ltmk`).
+
+**App-Einstellungen** (auch ohne verbundenen Scooter erreichbar)
+
+- Sprache (Deutsch/Englisch), Design (System/Hell/Dunkel), automatische Helligkeit per
+  Lichtsensor (experimentell), Bildschirm anlassen, Einheiten (metrisch/imperial), Aktualisierung
+  im Stand, automatisch mit dem zuletzt genutzten Scooter verbinden, Bestätigung vor
+  Sperren/Entsperren, Fahrten-Abfrage ein/aus, Update-Hinweis (prüft einmal täglich GitHub auf
+  eine neuere Version, abschaltbar).
+- Die Zurück-Geste geht stufenweise: Menü schließen → Übersicht → sauber trennen zur
+  Geräteliste → App beenden. Zusätzlich gibt es den „Trennen"-Button.
+
+**Technik**: persistente BLE-Sitzung (keine Neuverbindung pro Abfrage) mit automatischem
+Wiederholungsversuch bei kurzzeitigen Verbindungsproblemen.
+
+### Erste Schritte
+
+1. APK aus den [Releases](https://github.com/desperado0044/xiaomi-scooter-5pro-ble/releases)
+   laden und installieren (Sideload, „unbekannte Quellen" erlauben; es ist eine Debug-signierte
+   APK, kein Play-Store-Release). Bluetooth-Berechtigung erlauben.
+2. „Scooter hinzufügen": Cloud-Login (QR-Code oder Passwort), bei gesetzter Sharing-PIN die
+   Geräte-PIN eingeben — die App holt den Schlüssel einmalig ab. Alternativ eine Exportdatei bzw.
+   einen Code importieren.
+3. Scooter in der Geräteliste antippen — die Übersicht öffnet sich.
+4. Dokumente: Kachel „Dokumente" → Scannen, Fotos oder Datei.
+5. Zweites Handy (z.B. Familie): am ersten Handy „Exportieren", Datei teilen, am zweiten
+   „Scooter hinzufügen" → „Datei auswählen".
 
 ### Lizenz
 
@@ -176,44 +249,86 @@ disclaimer).
   responsibility and outside what this project is intended for.
 - **Cloud credentials and terms of service.** The cloud-login part talks to undocumented, internal
   Xiaomi cloud APIs. This may violate your Xiaomi account's terms of service; in the worst case it
-  could lead to restrictions on your account. Your password/PIN is never hardcoded anywhere — it's
-  entered in the app and stored only encrypted, locally on your device via the Android Keystore —
+  could lead to restrictions on your account. Password and device PIN are never hardcoded anywhere
+  and are not stored on your device either — they are only needed for the one-time login / key
+  retrieval; only the BLE key obtained with them is stored, encrypted via the Android Keystore —
   even so, use of these APIs is at your own responsibility. The same applies to an exported access
-  code (export/import feature): it contains the full BLE key for a device and should only be
-  shared with people who are actually allowed to use that device.
+  code and export file (export/import feature): they contain the full BLE key for a device (the
+  file also documents and history) and should only be shared with people who are actually allowed
+  to use that device — preferably with the file encrypted by a password.
+- **Personal documents.** The documents feature stores photos/PDFs of your papers (e.g. insurance
+  confirmation) in your phone's app-private storage (not in the gallery, unencrypted); the
+  original camera photos do stay in your gallery, though. You are responsible for handling this
+  personal data. Whether a digital copy is accepted at a check is up to the checking authority —
+  this is not legal advice; carry the originals if in doubt.
 - **No support, no promise of continued development.** Xiaomi can
   change the protocol at any time via a firmware update and render this software non-functional,
   with no update to this repository to be expected.
 
 ### Features
 
-- **Manage multiple scooters at once**: a device picker screen instead of a single swappable
-  slot — save, rename, and (with a confirmation dialog) forget any number of devices.
-- **Export/import access**: an already set-up scooter can be exported as a code or a file so a
-  second person (e.g. a family member) can set it up directly on their own phone, without going
-  through a cloud login/PIN of their own.
-- Cloud login directly in the app (password **or** QR code via Chrome Custom Tabs — the latter
-  also works for accounts with no separate Xiaomi password, e.g. Google sign-in)
-- BLE scan to find your own scooter without knowing its MAC address beforehand
-- Automatic retrieval of the BLE security key (`ltmk`) via the Xiaomi cloud API
-- Persistent BLE session (no reconnect on every request), with automatic retry on transient
-  connection issues
-- Fully switchable German/English UI (remembers your choice)
-- All known MIoT properties across six tabs, with correct unit/scaling display and plain text
-  instead of raw values where possible:
-  - **Ride**: riding mode (settable), average/top speed, total/trip distance, riding state,
-    fault status, remaining range
-  - **Battery**: battery level, voltage/current/power, battery status/temperature, charge
-    cycles, battery health
-  - **Settings**: lock, cruise control, tail light, energy recovery strength, ASR/TCS, hill
-    features, ambient light, Bluetooth search, and more (most of these settable, each with a
-    safety/legal note for regionally sensitive functions like cruise control and tail light)
-  - **Vehicle**: scooter temperature, lock warning signal, tire maintenance reminder, sleep
-    state, plus a "find my scooter" button (triggers a real beep/flash on the device)
-  - **Identification**: serial numbers, firmware versions, production/activation date
-  - **Ride log**: the scooter's most recently recorded rides (duration, distance,
-    average/top speed per ride)
-- A "Disconnect" button for a clean connection teardown instead of just closing the app
+**Riding and overview**
+
+- **Overview** as the start page after connecting: remaining range and battery level in large
+  numbers, riding mode (Walk/Drive/Sport) and energy recovery switchable right there, plus riding
+  state, trip, ride time, average/top speed, lock, find-my-scooter and fault status — all on one
+  screen.
+- **Side menu** with the sections Ride, Battery, Settings, Vehicle, Identification, Ride log,
+  History and App settings. All known MIoT properties with correct unit/scaling display and plain
+  text instead of raw values; most settings are settable, with a safety/legal note for regionally
+  sensitive functions (cruise control, tail light).
+- **Live values**: automatic refresh; about every 2.5 s while riding (the ride-relevant values),
+  adjustable while parked (economy/normal/fast).
+- **Ride log** (the scooter's most recent rides) can be exported as a file; **consumption
+  history** (distance and Wh/km per riding mode, experimental): after connecting, the app asks
+  which mode you mostly rode in.
+- **Tire maintenance**: reminder on/off and interval (14–180 days) settable.
+- **Home-screen widget** with the last known status (battery, lock, range).
+
+**Documents per scooter** (offline, no connection to the scooter needed)
+
+- A "Documents" tile at the top of the device list plus a "📄 N" button on every scooter card.
+- **Scan** opens your phone's camera app (choose e.g. its document mode there) and then the photo
+  picker; **Photos** takes existing photos; **File** imports a PDF or image. Several selected
+  photos become **one** multi-page document, more pages can be added later.
+- **Show-it view**: full screen, paging, zoom, screen stays on, full brightness; PDFs page by
+  page. Rename and delete with confirmation.
+
+**Multiple scooters, export and import**
+
+- Any number of scooters side by side: save, rename, forget (with confirmation) — forgetting also
+  removes the scooter's documents and history.
+- **Export of everything that belongs to a scooter** (key, name/model, documents, history) in one
+  file, optionally encrypted with a password of your choice (AES-256). Import recognizes the file
+  by itself and asks for the password if needed. The short text code (key only) remains for the
+  quick case.
+- Sign-in directly in the app: cloud login (password **or** QR code via Chrome Custom Tabs — also
+  for accounts without a separate Xiaomi password, e.g. Google sign-in), BLE scan without
+  knowing the MAC address, automatic retrieval of the BLE key (`ltmk`).
+
+**App settings** (also reachable without a connected scooter)
+
+- Language (German/English), theme (system/light/dark), automatic brightness via the light sensor
+  (experimental), keep screen on, units (metric/imperial), refresh while parked, connect
+  automatically to the last used scooter, confirmation before lock/unlock, ride prompt on/off,
+  update notice (checks GitHub once a day for a newer version, can be turned off).
+- The back gesture steps outward: close menu → overview → clean disconnect to the device list →
+  leave the app. There is also a "Disconnect" button.
+
+**Under the hood**: persistent BLE session (no reconnect per request) with automatic retry on
+transient connection issues.
+
+### Getting started
+
+1. Download the APK from the [Releases](https://github.com/desperado0044/xiaomi-scooter-5pro-ble/releases)
+   and install it (sideload, allow "unknown sources"; it is a debug-signed APK, not a Play Store
+   release). Allow the Bluetooth permission.
+2. "Add scooter": cloud login (QR code or password); if a sharing PIN is set, enter the device PIN
+   — the app fetches the key once. Alternatively import an export file or code.
+3. Tap the scooter in the device list — the overview opens.
+4. Documents: "Documents" tile → Scan, Photos or File.
+5. Second phone (e.g. family): on the first phone "Export", share the file, on the second
+   "Add scooter" → "Choose file".
 
 ### License
 
