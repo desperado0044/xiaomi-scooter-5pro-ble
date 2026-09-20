@@ -1,9 +1,9 @@
-# Scooter RE Client — Xiaomi Electric Scooter (Android)
+# Xiaomi Electric Scooter 5 / 5 Pro / 5 Max — Android BLE Client (Mi Home alternative)
 
 **[Deutsch](#deutsch) | [English](#english)**
 
-**Alternative Android-App für den Xiaomi Electric Scooter 5 Pro / 5 Max — Dashboard, Fahrmodi, Sperre, Akku- und Fahrdaten direkt per Bluetooth, ohne Mi-Home-App.**
-*An alternative Android app for the Xiaomi Electric Scooter 5 Pro / 5 Max — dashboard, ride modes, lock, battery and ride data over Bluetooth Low Energy, no Mi Home app needed.*
+**Alternative Android-App für den Xiaomi Electric Scooter 5 Pro / 5 Max (der normale 5 sollte ebenfalls funktionieren) — Dashboard, Fahrmodi, Sperre, Akku- und Fahrdaten direkt per Bluetooth, ohne Mi-Home-App.**
+*An alternative Android app for the Xiaomi Electric Scooter 5 Pro / 5 Max (the standard 5 should work as well) — dashboard, ride modes, lock, battery and ride data over Bluetooth Low Energy, no Mi Home app needed.*
 
 ---
 
@@ -12,7 +12,7 @@
 ## Deutsch
 
 Ein eigenständiger, quelloffener Android-Client für **Xiaomi Electric Scooter** der 5er-Reihe
-(getestet: 5 Pro und 5 Max), der das Fahrzeug direkt per Bluetooth Low Energy anspricht — ohne
+(getestet: 5 Pro und 5 Max; der normale 5 sollte ebenfalls laufen), der das Fahrzeug direkt per Bluetooth Low Energy anspricht — ohne
 die offizielle Mi-Home-App. Das komplette BLE-Auth-Protokoll (ECDH P-256 → HKDF-SHA256 →
 AES-CCM) wurde durch eigene Reverse-Engineering-Arbeit nachvollzogen und ist Byte für Byte
 gegen beide realen Geräte verifiziert.
@@ -46,9 +46,9 @@ Fassung dieses Ausschlusses).
   die dir (oder Personen, die dir ausdrücklich Zugriff gewähren, z.B. über die
   Export/Import-Funktion) gehören — nicht für fremde Geräte ohne Zustimmung des Eigentümers.
 - **Getestet am Xiaomi Electric Scooter 5 Pro und 5 Max** (BLE-Chip RTL8762C, Firmware
-  2.7.0_0015.x). Ob weitere Modelle der 5er-Reihe (z.B. "Electric Scooter 5" ohne "Pro"/"Max")
-  dasselbe Protokoll sprechen, ist **nicht verifiziert** — die App verwendet in diesem Fall die
-  5-Pro-Tabelle als ungeprüften Startpunkt.
+  2.7.0_0015.x). Der normale **Electric Scooter 5** (ohne „Pro"/„Max") **sollte ebenfalls
+  funktionieren**, wurde aber nicht getestet — die App verwendet für nicht erkannte
+  Modelle die 5-Pro-Tabelle. Erfahrungsberichte dazu sind willkommen (z.B. als Issue).
 - **Keine Geschwindigkeitsbegrenzung wird umgangen.** Dieses Projekt implementiert bewusst
   **keine** Funktion zum Ändern der regionalen Geschwindigkeitsbegrenzung oder zum Beschreiben
   der Motorsteuerungs-Firmware — das würde physischen ST-Link/SWD-Zugriff auf den Motorcontroller
@@ -231,7 +231,7 @@ Zertifikat-SHA-256 der offiziellen Releases ab 2.2:
 ## English
 
 A standalone, open-source Android client for **Xiaomi Electric Scooter** 5-series models
-(tested: 5 Pro and 5 Max) that talks to the vehicle directly over Bluetooth Low Energy —
+(tested: 5 Pro and 5 Max; the standard 5 should work too) that talks to the vehicle directly over Bluetooth Low Energy —
 without the official Mi Home app. The complete BLE auth protocol (ECDH P-256 → HKDF-SHA256 →
 AES-CCM) was reverse-engineered from scratch and is verified byte-for-byte against both real
 devices.
@@ -264,9 +264,9 @@ disclaimer).
   devices that belong to you (or to someone who has explicitly granted you access, e.g. via the
   export/import feature) — not for someone else's device without the owner's consent.
 - **Tested on the Xiaomi Electric Scooter 5 Pro and 5 Max** (BLE chip RTL8762C, firmware
-  2.7.0_0015.x). Whether other 5-series models (e.g. "Electric Scooter 5" without "Pro"/"Max")
-  speak the same protocol is **not verified** — the app falls back to the 5 Pro's property table
-  as an unverified starting point in that case.
+  2.7.0_0015.x). The standard **Electric Scooter 5** (without "Pro"/"Max") **should work as
+  well**, but it has not been tested — for models the app does not recognize it uses the
+  5 Pro's property table. Reports about this are welcome (e.g. as an issue).
 - **No speed limiter is bypassed.** This project deliberately implements **no** function to
   change the regional speed limit or to flash the motor-controller firmware — that would require
   physical ST-Link/SWD access to the motor controller and was intentionally not built, regardless
