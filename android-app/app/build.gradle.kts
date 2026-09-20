@@ -13,7 +13,7 @@ android {
         minSdk = 26 // AES/CCM via the platform provider needs API 26+ (Conscrypt)
         targetSdk = 35
         versionCode = 10
-        versionName = "1.6"
+        versionName = "2.0"
     }
 
     buildTypes {
