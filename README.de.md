@@ -158,6 +158,7 @@ Fassung dieses Ausschlusses).
 - **Update-Knopf**: Gibt es eine neuere Version, bietet der Hinweis „Update laden" an: Die App lädt die APK von der
   GitHub-Release-Seite dieses Projekts, prüft Prüfsumme und Signatur und öffnet den Installer des Systems, in dem du
   bestätigst. Es wird nie etwas still installiert. (Google Play Protect bietet bei einer neuen Version einmal einen Scan an.)
+- **Scooter suchen**: lässt den Scooter piepen und blinken. Er muss dafür eingeschaltet und in Bluetooth-Reichweite sein.
 - Die Zurück-Geste geht stufenweise: Menü schließen → Übersicht → sauber trennen zur
   Geräteliste → App beenden. Zusätzlich gibt es den „Trennen"-Button.
 

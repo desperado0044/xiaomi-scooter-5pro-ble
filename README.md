@@ -151,6 +151,7 @@ disclaimer).
 - **Update button**: when a newer release exists, the notice offers "Download update": the app downloads the APK from
   this project's GitHub release page, checks its checksum and signature and opens the system installer, where you
   confirm. Nothing is ever installed silently. (Google Play Protect may offer to scan a new version once.)
+- **Find scooter**: makes the scooter beep and flash. It needs a switched-on scooter within Bluetooth range.
 - The back gesture steps outward: close menu → overview → clean disconnect to the device list →
   leave the app. There is also a "Disconnect" button.
 
