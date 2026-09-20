@@ -5,7 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
@@ -13,7 +13,7 @@ import androidx.core.content.ContextCompat
 import com.scooterre.client.ui.ScooterApp
 import com.scooterre.client.viewmodel.ScooterViewModel
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     private val requestPermissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {}
     private val viewModel: ScooterViewModel by viewModels()
@@ -40,6 +40,11 @@ class MainActivity : ComponentActivity() {
     private fun handleImportIntent(intent: Intent?) {
         val uri = intent?.data ?: return
         if (uri.scheme != "scooterre") return
+        // A locked app must not import keys or open screens before the user has unlocked it.
+        viewModel.runWhenUnlocked { handleDeepLink(uri) }
+    }
+
+    private fun handleDeepLink(uri: android.net.Uri) {
         when (uri.host) {
             "import" -> {
                 val fileName = uri.getQueryParameter("file")

@@ -65,6 +65,7 @@ data class SettingsActions(
     val onSetConfirmCritical: (Boolean) -> Unit,
     val onSetRideTracking: (Boolean) -> Unit,
     val onSetUpdateCheck: (Boolean) -> Unit,
+    val onSetAppLock: (Boolean) -> Unit,
 )
 
 @Composable
@@ -166,6 +167,7 @@ fun AppSettingsContent(state: UiState, s: AppStrings, settings: SettingsActions)
         SettingsSwitchCard(s.confirmCriticalLabel, s.confirmCriticalHint, state.confirmCritical, settings.onSetConfirmCritical)
         SettingsSwitchCard(s.rideTrackingLabel, s.rideTrackingHint, state.rideTracking, settings.onSetRideTracking)
         SettingsSwitchCard(s.updateCheckLabel, s.updateCheckHint, state.updateCheck, settings.onSetUpdateCheck)
+        SettingsSwitchCard(s.appLockLabel, s.appLockHint, state.appLock, settings.onSetAppLock)
         SettingsCard {
             Text(s.aboutLabel, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
             Text(s.aboutVersion(versionName), style = MaterialTheme.typography.bodyMedium)

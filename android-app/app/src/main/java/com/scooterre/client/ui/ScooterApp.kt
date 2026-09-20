@@ -10,6 +10,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import android.widget.Toast
+import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.withResumed
+import com.scooterre.client.security.AppLock
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -24,9 +30,22 @@ import com.scooterre.client.viewmodel.ScooterViewModel
 fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
     val state by viewModel.state.collectAsState()
 
-    LaunchedEffect(Unit) {
-        viewModel.autoConnectOnStart()
-        viewModel.checkForUpdateOnStart()
+    val context = LocalContext.current
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val lockStrings = strings(state.language)
+    fun requestUnlock() {
+        (context as? FragmentActivity)?.let { activity ->
+            AppLock.authenticate(activity, lockStrings.lockPromptTitle, lockStrings.cancelButton) { ok -> if (ok) viewModel.unlock() }
+        }
+    }
+    // Nothing may start (auto-connect, update check) and no prompt may be missed while locked.
+    LaunchedEffect(state.locked) {
+        if (state.locked) {
+            lifecycle.withResumed { requestUnlock() }
+        } else {
+            viewModel.autoConnectOnStart()
+            viewModel.checkForUpdateOnStart()
+        }
     }
 
     val systemDark = isSystemInDarkTheme()
@@ -71,6 +90,18 @@ fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
         onSetConfirmCritical = viewModel::setConfirmCritical,
         onSetRideTracking = viewModel::setRideTracking,
         onSetUpdateCheck = viewModel::setUpdateCheck,
+        onSetAppLock = { enable ->
+            if (!enable) {
+                viewModel.setAppLock(false)
+            } else if (!AppLock.isAvailable(context)) {
+                Toast.makeText(context, lockStrings.lockUnavailable, Toast.LENGTH_LONG).show()
+            } else {
+                // Turning it on must first succeed once, so the lock can never lock the owner out.
+                (context as? FragmentActivity)?.let { activity ->
+                    AppLock.authenticate(activity, lockStrings.lockPromptTitle, lockStrings.cancelButton) { ok -> if (ok) viewModel.setAppLock(true) }
+                }
+            }
+        },
     )
 
     val documentActions = DocumentActions(
@@ -86,6 +117,10 @@ fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
     CompositionLocalProvider(LocalUnits provides state.units) {
         ScooterTheme(darkTheme = dark) {
             Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                if (state.locked) {
+                    LockScreen(lockStrings) { requestUnlock() }
+                    return@Surface
+                }
                 when (state.screen) {
                     Screen.LOGIN -> LoginScreen(
                         state = state,

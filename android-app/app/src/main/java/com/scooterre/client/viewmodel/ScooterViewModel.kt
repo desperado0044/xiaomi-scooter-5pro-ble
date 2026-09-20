@@ -68,6 +68,7 @@ private const val KEY_REFRESH_RATE = "refresh_rate"
 private const val KEY_CONFIRM_CRITICAL = "confirm_critical"
 private const val KEY_RIDE_TRACKING = "ride_tracking"
 private const val KEY_UPDATE_CHECK = "update_check"
+private const val KEY_APP_LOCK = "app_lock"
 private const val KEY_UPDATE_LAST_CHECK = "update_last_check"
 private const val KEY_UPDATE_TAG = "update_latest_tag"
 private const val KEY_UPDATE_URL = "update_latest_url"
@@ -99,6 +100,9 @@ data class UiState(
     val confirmCritical: Boolean = false,
     val rideTracking: Boolean = true,
     val updateCheck: Boolean = true,
+    // App lock (opt-in, default off): asks for fingerprint/PIN once per app start.
+    val appLock: Boolean = false,
+    val locked: Boolean = false,
     val availableUpdate: UpdateInfo? = null,
     // Documents: which scooter's list is open, its documents, the one shown full screen, and the
     // per-scooter counts shown on the device list.
@@ -187,6 +191,8 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
                 confirmCritical = prefs.getBoolean(KEY_CONFIRM_CRITICAL, false),
                 rideTracking = prefs.getBoolean(KEY_RIDE_TRACKING, true),
                 updateCheck = prefs.getBoolean(KEY_UPDATE_CHECK, true),
+                appLock = prefs.getBoolean(KEY_APP_LOCK, false),
+                locked = prefs.getBoolean(KEY_APP_LOCK, false),
                 documentCounts = known.associate { it.mac to documentStore.count(it.mac) },
                 availableUpdate = if (prefs.getBoolean(KEY_UPDATE_CHECK, true)) storedUpdate() else null,
                 knownDevices = known,
@@ -378,6 +384,25 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         prefs.edit().putBoolean(KEY_UPDATE_CHECK, enabled).apply()
         _state.update { it.copy(updateCheck = enabled, availableUpdate = if (enabled) storedUpdate() else null) }
         if (enabled) viewModelScope.launch { refreshUpdateInfo(force = true) }
+    }
+
+    private val afterUnlock = mutableListOf<() -> Unit>()
+
+    /** Runs [action] now, or - while the app is locked - right after it gets unlocked. */
+    fun runWhenUnlocked(action: () -> Unit) {
+        if (_state.value.locked) afterUnlock += action else action()
+    }
+
+    fun unlock() {
+        _state.update { it.copy(locked = false) }
+        val pending = afterUnlock.toList()
+        afterUnlock.clear()
+        pending.forEach { it() }
+    }
+
+    fun setAppLock(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_APP_LOCK, enabled).apply()
+        _state.update { it.copy(appLock = enabled) }
     }
 
     fun setKeepScreenOn(enabled: Boolean) {
