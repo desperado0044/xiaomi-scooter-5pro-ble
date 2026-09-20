@@ -24,7 +24,10 @@ import com.scooterre.client.viewmodel.ScooterViewModel
 fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
     val state by viewModel.state.collectAsState()
 
-    LaunchedEffect(Unit) { viewModel.autoConnectOnStart() }
+    LaunchedEffect(Unit) {
+        viewModel.autoConnectOnStart()
+        viewModel.checkForUpdateOnStart()
+    }
 
     val systemDark = isSystemInDarkTheme()
     AmbientBrightnessEffect(state.autoBrightness)
@@ -54,6 +57,7 @@ fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
     // Registered before the screens so DashboardScreen's own, later BackHandler takes priority.
     BackHandler(enabled = state.screen == Screen.DASHBOARD) { viewModel.disconnect() }
     BackHandler(enabled = state.screen == Screen.LOGIN && state.knownDevices.isNotEmpty()) { viewModel.openDevicePicker() }
+    BackHandler(enabled = state.screen == Screen.APP_SETTINGS) { viewModel.closeAppSettings() }
 
     val settingsActions = SettingsActions(
         onSetLanguage = viewModel::setLanguage,
@@ -65,6 +69,7 @@ fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
         onSetAutoConnect = viewModel::setAutoConnect,
         onSetConfirmCritical = viewModel::setConfirmCritical,
         onSetRideTracking = viewModel::setRideTracking,
+        onSetUpdateCheck = viewModel::setUpdateCheck,
     )
 
     CompositionLocalProvider(LocalUnits provides state.units) {
@@ -109,6 +114,12 @@ fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
                         onDismissExportCode = viewModel::dismissExportCode,
                         onAddDevice = viewModel::startAddDevice,
                         onToggleLanguage = viewModel::toggleLanguage,
+                        onOpenSettings = viewModel::openAppSettings,
+                    )
+                    Screen.APP_SETTINGS -> AppSettingsScreen(
+                        state = state,
+                        settings = settingsActions,
+                        onBack = viewModel::closeAppSettings,
                     )
                 }
             }

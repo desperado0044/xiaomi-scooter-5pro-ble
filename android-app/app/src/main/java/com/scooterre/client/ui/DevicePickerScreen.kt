@@ -45,6 +45,7 @@ fun DevicePickerScreen(
     onDismissExportCode: () -> Unit,
     onAddDevice: () -> Unit,
     onToggleLanguage: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val s = strings(state.language)
     val context = LocalContext.current
@@ -73,8 +74,13 @@ fun DevicePickerScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(s.devicePickerTitle, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-            TextButton(onClick = onToggleLanguage) { Text(if (state.language == Lang.DE) "🇩🇪" else "🇬🇧") }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = onOpenSettings) { Text("⚙️") }
+                TextButton(onClick = onToggleLanguage) { Text(if (state.language == Lang.DE) "🇩🇪" else "🇬🇧") }
+            }
         }
+
+        state.availableUpdate?.let { UpdateBanner(it, s, Modifier.padding(top = 8.dp)) }
 
         if (state.knownDevices.isEmpty()) {
             Text(

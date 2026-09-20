@@ -8,78 +8,82 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.view.WindowManager
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.log10
-import kotlin.math.pow
+import kotlin.math.max
 
-// Brightness curve over log10(lux): ~1 lx (dark room) -> 10%, ~100 lx (living room) -> ~42%,
-// ~1000 lx (overcast) -> ~70%, 10000+ lx (daylight/sun) -> 100%.
-private const val MIN_BRIGHTNESS = 0.1f
-private const val LOG_LUX_FULL = 4.0
-private const val SMOOTHING = 0.2
-private const val MIN_STEP = 0.03f
+// log10(lux) -> window brightness on the same perceptual scale as the brightness slider (0..1).
+// Tuned against this phone's own auto-brightness (about 250 lx indoors -> about 0.25) so indoors it
+// behaves like the system does, while direct daylight pushes the screen to full brightness.
+private val CURVE = listOf(
+    0.0 to 0.05f, 0.7 to 0.08f, 1.7 to 0.15f, 2.4 to 0.25f, 3.0 to 0.45f, 3.7 to 0.8f, 4.0 to 1.0f,
+)
 
-private fun brightnessForLogLux(logLux: Double): Float {
-    val t = (logLux / LOG_LUX_FULL).coerceIn(0.0, 1.0)
-    return (MIN_BRIGHTNESS + (1f - MIN_BRIGHTNESS) * t.pow(1.5)).toFloat()
+private fun brightnessForLogLux(x: Double): Float {
+    if (x <= CURVE.first().first) return CURVE.first().second
+    for (i in 1 until CURVE.size) {
+        val (x1, y1) = CURVE[i]
+        if (x <= x1) {
+            val (x0, y0) = CURVE[i - 1]
+            return (y0 + (y1 - y0) * ((x - x0) / (x1 - x0))).toFloat()
+        }
+    }
+    return CURVE.last().second
 }
 
-/** While [enabled] and the app is in the foreground, overrides this window's brightness from the
- * ambient light sensor (smoothed so passing shadows don't flicker the screen); the override is
- * released again when the app leaves the foreground or the option is turned off, handing control
- * back to the system brightness setting. Does nothing on devices without a light sensor. */
+/** While [enabled] and the app is in the foreground, drives this window's brightness from the
+ * ambient light sensor and releases it again (back to the system setting) when the app leaves the
+ * foreground or the option is turned off. Does nothing on devices without a light sensor.
+ *
+ * The light sensor only reports when the value changes, so the easing towards the target runs on
+ * its own 100 ms clock instead of per sensor event - otherwise a stable reading would leave the
+ * screen stuck part-way between the old and the new brightness. */
 @Composable
 fun AmbientBrightnessEffect(enabled: Boolean) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    DisposableEffect(enabled, lifecycle) {
+    LaunchedEffect(enabled, lifecycle) {
         val window = (context as? Activity)?.window
         val manager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
         val sensor = manager.getDefaultSensor(Sensor.TYPE_LIGHT)
-        if (!enabled || window == null || sensor == null) return@DisposableEffect onDispose {}
+        if (!enabled || window == null || sensor == null) return@LaunchedEffect
 
-        fun applyBrightness(value: Float) {
+        fun apply(value: Float) {
             window.attributes = window.attributes.also { it.screenBrightness = value }
         }
 
-        var smoothedLogLux: Double? = null
-        var applied = -1f
-        val listener = object : SensorEventListener {
-            override fun onSensorChanged(event: SensorEvent) {
-                val logLux = log10(event.values[0].toDouble().coerceAtLeast(1.0))
-                val smoothed = smoothedLogLux?.let { it + SMOOTHING * (logLux - it) } ?: logLux
-                smoothedLogLux = smoothed
-                val target = brightnessForLogLux(smoothed)
-                if (abs(target - applied) >= MIN_STEP) {
-                    applied = target
-                    applyBrightness(target)
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            var latestLogLux: Double? = null
+            val listener = object : SensorEventListener {
+                override fun onSensorChanged(event: SensorEvent) {
+                    latestLogLux = log10(max(event.values[0], 1f).toDouble())
                 }
-            }
 
-            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
-        }
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_RESUME -> manager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_NORMAL)
-                Lifecycle.Event.ON_PAUSE -> {
-                    manager.unregisterListener(listener)
-                    applied = -1f
-                    smoothedLogLux = null
-                    applyBrightness(WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE)
-                }
-                else -> {}
+                override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
             }
-        }
-        lifecycle.addObserver(observer)
-        onDispose {
-            lifecycle.removeObserver(observer)
-            manager.unregisterListener(listener)
-            applyBrightness(WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE)
+            manager.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_NORMAL)
+            try {
+                var current: Float? = null
+                while (true) {
+                    delay(100)
+                    val logLux = latestLogLux ?: continue
+                    val target = brightnessForLogLux(logLux)
+                    val next = current?.let { it + (target - it) * 0.12f } ?: target
+                    if (current == null || abs(next - current) >= 0.004f) {
+                        current = next
+                        apply(next)
+                    }
+                }
+            } finally {
+                manager.unregisterListener(listener)
+                apply(WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE)
+            }
         }
     }
 }

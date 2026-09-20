@@ -33,6 +33,8 @@ import com.scooterre.client.ui.ThemeMode
 import com.scooterre.client.ui.UnitSystem
 import com.scooterre.client.ui.distance
 import com.scooterre.client.ui.distanceUnit
+import com.scooterre.client.update.UpdateChecker
+import com.scooterre.client.update.UpdateInfo
 import com.scooterre.client.ui.modelDisplayName
 import com.scooterre.client.ui.propertyName
 import com.scooterre.client.ui.strings
@@ -61,6 +63,11 @@ private const val KEY_LAST_CONNECTED = "last_connected_mac"
 private const val KEY_REFRESH_RATE = "refresh_rate"
 private const val KEY_CONFIRM_CRITICAL = "confirm_critical"
 private const val KEY_RIDE_TRACKING = "ride_tracking"
+private const val KEY_UPDATE_CHECK = "update_check"
+private const val KEY_UPDATE_LAST_CHECK = "update_last_check"
+private const val KEY_UPDATE_TAG = "update_latest_tag"
+private const val KEY_UPDATE_URL = "update_latest_url"
+private const val UPDATE_CHECK_INTERVAL_MS = 24L * 60 * 60 * 1000
 
 /** Polled every ~2.5s (see [ScooterViewModel.startAutoRefresh]) while actually riding, instead of
  * the full ~50-property table - small enough that one pass stays well inside that window even
@@ -74,7 +81,7 @@ private val RIDE_PRIORITY_PROPERTIES = setOf(
 /** Pause between full property sweeps while parked (a sweep itself takes ~9s on top). */
 enum class RefreshRate(val idleDelayMs: Long) { ECONOMY(30_000L), NORMAL(10_000L), FAST(3_000L) }
 
-enum class Screen { LOGIN, DASHBOARD, DEVICE_PICKER }
+enum class Screen { LOGIN, DASHBOARD, DEVICE_PICKER, APP_SETTINGS }
 
 data class UiState(
     val screen: Screen = Screen.LOGIN,
@@ -87,6 +94,8 @@ data class UiState(
     val refreshRate: RefreshRate = RefreshRate.NORMAL,
     val confirmCritical: Boolean = false,
     val rideTracking: Boolean = true,
+    val updateCheck: Boolean = true,
+    val availableUpdate: UpdateInfo? = null,
     val macAddress: String = DEFAULT_SCOOTER_MAC,
     // Preferably the name from the Xiaomi cloud account (finishCloudLogin), falling back to the
     // BLE-advertised name if picked from a scan, or null for a generic label in the dashboard.
@@ -165,6 +174,8 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
                 refreshRate = runCatching { RefreshRate.valueOf(prefs.getString(KEY_REFRESH_RATE, null) ?: "NORMAL") }.getOrDefault(RefreshRate.NORMAL),
                 confirmCritical = prefs.getBoolean(KEY_CONFIRM_CRITICAL, false),
                 rideTracking = prefs.getBoolean(KEY_RIDE_TRACKING, true),
+                updateCheck = prefs.getBoolean(KEY_UPDATE_CHECK, true),
+                availableUpdate = if (prefs.getBoolean(KEY_UPDATE_CHECK, true)) storedUpdate() else null,
                 knownDevices = known,
             )
         }
@@ -173,6 +184,20 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
 
     init {
         _state.update { it.copy(hasSavedLtmk = secureStore.loadLtmk(it.macAddress) != null) }
+    }
+
+    private var screenBeforeSettings = Screen.DEVICE_PICKER
+
+    /** App settings work without a connected scooter - opened from the device list (or login). */
+    fun openAppSettings() {
+        val current = _state.value.screen
+        if (current == Screen.APP_SETTINGS) return
+        screenBeforeSettings = current
+        _state.update { it.copy(screen = Screen.APP_SETTINGS) }
+    }
+
+    fun closeAppSettings() {
+        _state.update { it.copy(screen = screenBeforeSettings) }
     }
 
     fun setThemeMode(mode: ThemeMode) {
@@ -229,6 +254,38 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         val device = deviceRegistry.list().firstOrNull { it.mac.equals(lastMac, ignoreCase = true) } ?: return
         if (secureStore.loadLtmk(device.mac) == null) return
         connectKnownDevice(device)
+    }
+
+    private fun installedVersion(): String =
+        runCatching { getApplication<Application>().packageManager.getPackageInfo(getApplication<Application>().packageName, 0).versionName }
+            .getOrNull() ?: "0"
+
+    /** The newest release seen at the last check, but only if it is still newer than what is installed
+     * now - so the notice disappears by itself right after updating. */
+    private fun storedUpdate(): UpdateInfo? {
+        val tag = prefs.getString(KEY_UPDATE_TAG, null) ?: return null
+        val url = prefs.getString(KEY_UPDATE_URL, null) ?: return null
+        return if (UpdateChecker.isNewer(tag, installedVersion())) UpdateInfo(tag, url) else null
+    }
+
+    private suspend fun refreshUpdateInfo(force: Boolean) {
+        if (!_state.value.updateCheck) return
+        val now = System.currentTimeMillis()
+        if (force || now - prefs.getLong(KEY_UPDATE_LAST_CHECK, 0L) >= UPDATE_CHECK_INTERVAL_MS) {
+            val latest = withContext(Dispatchers.IO) { UpdateChecker.fetchLatest() } ?: return
+            prefs.edit().putLong(KEY_UPDATE_LAST_CHECK, now).putString(KEY_UPDATE_TAG, latest.version).putString(KEY_UPDATE_URL, latest.url).apply()
+        }
+        _state.update { it.copy(availableUpdate = storedUpdate()) }
+    }
+
+    fun checkForUpdateOnStart() {
+        viewModelScope.launch { refreshUpdateInfo(force = false) }
+    }
+
+    fun setUpdateCheck(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_UPDATE_CHECK, enabled).apply()
+        _state.update { it.copy(updateCheck = enabled, availableUpdate = if (enabled) storedUpdate() else null) }
+        if (enabled) viewModelScope.launch { refreshUpdateInfo(force = true) }
     }
 
     fun setKeepScreenOn(enabled: Boolean) {
