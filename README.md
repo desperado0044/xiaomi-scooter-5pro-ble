@@ -154,6 +154,11 @@ disclaimer).
   this project's GitHub release page, checks its checksum and signature and opens the system installer, where you
   confirm. Nothing is ever installed silently. (Google Play Protect may offer to scan a new version once.)
 - **Find scooter**: makes the scooter beep and flash. It needs a switched-on scooter within Bluetooth range.
+- **Range at your own consumption**: once a riding mode has 5 km of recorded rides, the overview shows the range
+  at *your* Wh/km in the current mode (newer rides count more, so an ageing battery shows up), next to the
+  scooter's own estimate. The Verlauf (history) tab also keeps a daily battery health log (health, cycles, odometer).
+- **Copy diagnostics**: one button in the app settings copies app, phone and scooter model, settings and the latest
+  error messages (no MAC address, keys or documents) for a bug report.
 - **Send documents**: one tap sends a scooter's documents (without the key) to family members. On their phone the
   file is picked with "File" in the documents screen and merged. A backup file can also be read in directly via
   "Add scooter" (new phone, family).

@@ -161,6 +161,11 @@ Fassung dieses Ausschlusses).
   GitHub-Release-Seite dieses Projekts, prüft Prüfsumme und Signatur und öffnet den Installer des Systems, in dem du
   bestätigst. Es wird nie etwas still installiert. (Google Play Protect bietet bei einer neuen Version einmal einen Scan an.)
 - **Scooter suchen**: lässt den Scooter piepen und blinken. Er muss dafür eingeschaltet und in Bluetooth-Reichweite sein.
+- **Reichweite nach eigenem Verbrauch**: Sobald ein Fahrmodus 5 km aufgezeichnete Fahrten hat, zeigt die Übersicht die
+  Reichweite mit *deinem* Wh/km im aktuellen Modus (neuere Fahrten zählen mehr, so fällt ein alternder Akku auf) neben der
+  Schätzung des Scooters. Der Tab „Verlauf" führt außerdem ein tägliches Akku-Gesundheits-Log (Gesundheit, Zyklen, Kilometerstand).
+- **Diagnose kopieren**: Ein Knopf in den App-Einstellungen kopiert App-, Handy- und Scooter-Modell, Einstellungen und die
+  letzten Fehlermeldungen (ohne MAC-Adresse, Schlüssel und Dokumente) für eine Fehlermeldung.
 - **Dokumente senden**: Ein Tipp schickt die Dokumente eines Scooters (ohne Schlüssel) an Familienmitglieder. Dort
   wird die Datei bei den Dokumenten mit „Datei" gewählt und zusammengeführt. Auch eine Sicherungsdatei lässt sich
   direkt über „Scooter hinzufügen" einlesen (neues Handy, Familie).
