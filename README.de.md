@@ -4,8 +4,8 @@
 
 **Alternative Android-App für den Xiaomi Electric Scooter 5 Pro / 5 Max (der normale 5 sollte ebenfalls funktionieren) — Dashboard, Fahrmodi, Sperre, Akku- und Fahrdaten direkt per Bluetooth, ohne Mi-Home-App.**
 
-Du suchst den **Elite, 5 Plus oder den 6 / 6 Lite / 6 Pro / 6 Max / 6 Ultra**? Diese Modelle werden **noch nicht unterstützt** — Stand und
-Mithilfe siehe [Unterstützte Modelle](#unterstützte-modelle).
+Du suchst den **Elite, 5 Plus oder den 6 / 6 Lite / 6 Pro / 6 Max / 6 Ultra**? Sie werden nur **experimentell und lesend** unterstützt
+(Werte werden angezeigt, nichts lässt sich ändern) — Stand und Mithilfe siehe [Unterstützte Modelle](#unterstützte-modelle).
 
 ---
 
@@ -87,12 +87,12 @@ Fassung dieses Ausschlusses).
 | Electric Scooter **5 Pro**, **5 Max** | Getestet (BLE-Chip RTL8762C, Firmware 2.7.0_0015.x) |
 | Electric Scooter **5** (normal) | Sollte funktionieren (gleiche Modellgruppe mit privater Wertetabelle), ungetestet |
 | Electric Scooter **6 Max** | **Nur lesend**, experimentell: vermutlich wie die 5er-Reihe, nicht bestätigt |
-| **Elite, 5 Plus, 6, 6 Lite, 6 Pro, 6 Ultra** | **Noch nicht unterstützt.** Ihre Werte sind anders nummeriert; die App zeigt und ändert für sie nichts und bietet nur den rein lesenden Bericht „Werte erkunden" |
+| **Elite, 5 Plus, 6, 6 Lite, 6 Pro, 6 Ultra** | **Experimentell, nur lesend.** Ihre Werte sind anders nummeriert, deshalb haben sie eigene Tabellen, gebaut aus Xiaomis öffentlicher Spezifikation und **nie an einem echten Gerät ausprobiert**. Die Werte erscheinen so, wie der Scooter sie sendet (keine Skalierung oder Umrechnung, manche Namen roh); nichts lässt sich ändern. Andere Modelle: nur der lesende Bericht „Werte erkunden" |
 
 **Warum diese Einschränkungen:** Die App spricht mit dem Scooter über nummerierte Werte („Properties"). Die Nummern
 unterscheiden sich je Modell, und eine falsche Tabelle würde falsche Werte zeigen oder — schlimmer — auf das falsche
-Property schreiben. Deshalb schreibt die App nur bei bekannten Modellen, behandelt den 6 Max nur lesend und sperrt
-alle Änderungen bei unbekannten Modellen. Ist das Modell unbekannt (z. B. per Exportcode hinzugefügt), werden die
+Property schreiben. Deshalb schreibt die App nur bei bekannten Modellen, behandelt den 6 Max und die Modelle mit eigener Tabelle nur lesend und
+führt bei ganz unbekannten Modellen nur den lesenden Bericht aus. Ist das Modell unbekannt (z. B. per Exportcode hinzugefügt), werden die
 ersten Messwerte geprüft und Änderungen gesperrt, wenn sie nicht passen. **Diese Prüfung erkennt nicht jeden Fall**:
 Antwortet ein unbekannter Scooter zufällig plausibel, bleiben Änderungen möglich. Nutze nur die getesteten Modelle,
 außer du nimmst dieses Risiko in Kauf.

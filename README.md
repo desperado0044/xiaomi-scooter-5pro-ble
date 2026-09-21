@@ -4,8 +4,8 @@
 
 **An alternative Android app for the Xiaomi Electric Scooter 5 Pro / 5 Max (the standard 5 should work as well) — dashboard, ride modes, lock, battery and ride data over Bluetooth Low Energy, no Mi Home app needed.**
 
-Looking for the **Elite, 5 Plus or the 6 / 6 Lite / 6 Pro / 6 Max / 6 Ultra**? Those models are **not supported yet** — see
-[Supported models](#supported-models) for the status and how you can help.
+Looking for the **Elite, 5 Plus or the 6 / 6 Lite / 6 Pro / 6 Max / 6 Ultra**? They have **experimental, read-only** support
+only (values are shown, nothing can be changed) — see [Supported models](#supported-models) for the status and how you can help.
 
 ---
 
@@ -81,12 +81,12 @@ disclaimer).
 | Electric Scooter **5 Pro**, **5 Max** | Tested (BLE chip RTL8762C, firmware 2.7.0_0015.x) |
 | Electric Scooter **5** (standard) | Should work (same group of models with a private property table), untested |
 | Electric Scooter **6 Max** | **Read-only**, experimental: assumed to match the 5 series, not confirmed |
-| **Elite, 5 Plus, 6, 6 Lite, 6 Pro, 6 Ultra** | **Not supported yet.** Their values are numbered differently; the app shows and changes nothing for them and only offers the read-only "Explore values" report |
+| **Elite, 5 Plus, 6, 6 Lite, 6 Pro, 6 Ultra** | **Experimental, read-only.** Their values are numbered differently, so they have their own tables, built from Xiaomi's public specification and **never tried on a real device**. Values are shown exactly as the scooter sends them (no scaling or conversion, some names raw); nothing can be changed. Other models: only the read-only "Explore values" report |
 
 **Why these restrictions:** the app talks to the scooter through numbered values ("properties"). The numbers
 differ between models, and a wrong table would show wrong values or — worse — write to the wrong property. So the
-app writes only on models it knows, treats the 6 Max as read-only and blocks all changes on models it does not
-know. If the model is unknown (for example a scooter added from an export code), the first readings are checked
+app writes only on models it knows, treats the 6 Max and the models with their own table as read-only and, for models
+it does not know at all, only runs the read-only report. If the model is unknown (for example a scooter added from an export code), the first readings are checked
 and changes are blocked when they do not fit. **This check cannot recognise every case**: if an unknown scooter
 happens to answer plausibly, changes stay possible. Use only the tested models unless you accept that risk.
 

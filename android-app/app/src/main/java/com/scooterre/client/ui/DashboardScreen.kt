@@ -434,13 +434,15 @@ private fun OverviewContent(
                     // CycleButtons control the Settings tab uses (same fixed Walk/Drive/Sport
                     // values, same onSetNumeric path), not a second implementation of mode
                     // switching living here.
-                    CycleButtons(
-                        propertyName = "RIDING_MODE",
-                        lang = lang,
-                        current = mode,
-                        onSelect = { onSetNumeric(propertiesByName.getValue("RIDING_MODE"), it) },
-                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
-                    )
+                    if (!profile.readOnly) {
+                        CycleButtons(
+                            propertyName = "RIDING_MODE",
+                            lang = lang,
+                            current = mode,
+                            onSelect = { onSetNumeric(propertiesByName.getValue("RIDING_MODE"), it) },
+                            modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                        )
+                    }
                 }
             }
         }
@@ -535,7 +537,7 @@ private fun OverviewTile(
                 Button(onClick = { onSetBool(property, true) }, contentPadding = PaddingValues(horizontal = 12.dp)) {
                     Text(s.triggerButton)
                 }
-            } else if (property.name == "IS_LOCKED" && result?.ok == true) {
+            } else if (property.name == "IS_LOCKED" && result?.ok == true && !profile.readOnly) {
                 Switch(checked = (result.value as? Long) == 1L, onCheckedChange = { onSetBool(property, it) })
             }
         }

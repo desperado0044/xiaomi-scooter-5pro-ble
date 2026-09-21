@@ -262,11 +262,13 @@ enum class ModelSupport {
     /** Tested (5 Pro, 5 Max) or the same group without a public spec (Electric Scooter 5): read and write. */
     FULL,
 
-    /** Same group as the 5 Pro/5 Max by Xiaomi's registry (private property table), but not confirmed: read only. */
+    /** Read only and experimental: either the same group as the 5 Pro/5 Max by Xiaomi's registry (private property table,
+     * not confirmed: the 6 Max) or a model with its own table built from Xiaomi's public spec ([FamilyAProfiles]: Elite,
+     * 5 Plus, 6, 6 Lite, 6 Pro, 6 Ultra), never tried on a real device. */
     READ_ONLY,
 
-    /** Publishes a spec whose values are numbered differently (Elite, 5 Plus, 6 / 6 Lite / 6 Pro / 6 Ultra ...):
-     * the 5 Pro table would show wrong values and write to the wrong properties, so the app does not connect. */
+    /** Not known at all (a model that is not listed): the 5 Pro table would show wrong values and write to the wrong
+     * properties, so the app only runs the read-only "explore values" report and shows nothing else. */
     UNSUPPORTED,
 }
 
@@ -312,13 +314,13 @@ object SpecProfiles {
      * readings after connecting are checked instead (see the view model's layout check). */
     fun supportOf(model: String?): ModelSupport = when {
         model.isNullOrBlank() || model in FULL_MODELS -> ModelSupport.FULL
-        model in READ_ONLY_MODELS -> ModelSupport.READ_ONLY
+        model in READ_ONLY_MODELS || model in FamilyAProfiles.BY_MODEL -> ModelSupport.READ_ONLY
         else -> ModelSupport.UNSUPPORTED
     }
 
     /** The 5 Pro's table for every model that [supportOf] lets through, read-only where it is not confirmed. */
     fun forModel(model: String?): SpecProfile = when (supportOf(model)) {
-        ModelSupport.READ_ONLY -> SCOOTER_5_PRO.copy(readOnly = true)
+        ModelSupport.READ_ONLY -> model?.let { FamilyAProfiles.BY_MODEL[it] } ?: SCOOTER_5_PRO.copy(readOnly = true)
         else -> if (model == MODEL_5MAX) SCOOTER_5_MAX else SCOOTER_5_PRO
     }
 }

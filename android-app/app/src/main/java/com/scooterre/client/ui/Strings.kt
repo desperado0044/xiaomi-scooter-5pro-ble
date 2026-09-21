@@ -761,7 +761,8 @@ private val PROPERTY_NAMES_EN: Map<String, String> = mapOf(
 )
 
 fun propertyName(name: String, lang: Lang): String =
-    (if (lang == Lang.DE) PROPERTY_NAMES_DE else PROPERTY_NAMES_EN)[name] ?: name
+    (if (lang == Lang.DE) PROPERTY_NAMES_DE else PROPERTY_NAMES_EN)[name]
+        ?: if (name.startsWith("A_")) name.removePrefix("A_").lowercase().replace('_', ' ') else name
 
 /** Human-readable label for a scooter model, keyed by the Xiaomi cloud's own model string (see
  * [com.scooterre.client.protocol.SpecProfiles]) - falls back to a generic name for a device that
@@ -770,6 +771,14 @@ fun propertyName(name: String, lang: Lang): String =
 fun modelDisplayName(model: String?, lang: Lang): String = when (model) {
     com.scooterre.client.protocol.SpecProfiles.MODEL_5PRO -> "Scooter 5 Pro"
     com.scooterre.client.protocol.SpecProfiles.MODEL_5MAX -> "Scooter 5 Max"
+    "xiaomi.scooter.t2336", "xiaomi.scooter.5" -> "Scooter 5"
+    "xiaomi.scooter.5plus" -> "Scooter 5 Plus"
+    "xiaomi.scooter.elite" -> "Scooter Elite"
+    "xiaomi.scooter.6" -> "Scooter 6"
+    "xiaomi.scooter.6lite" -> "Scooter 6 Lite"
+    "xiaomi.scooter.6pro" -> "Scooter 6 Pro"
+    "xiaomi.scooter.6max" -> "Scooter 6 Max"
+    "xiaomi.scooter.cross" -> "Scooter 6 Ultra"
     else -> strings(lang).genericDeviceName
 }
 
@@ -813,7 +822,8 @@ private val ENUM_LABELS_EN: Map<String, Map<Long, String>> = mapOf(
 
 // RIDING_MODE's mode names are shown the same in both languages, like a manufacturer preset name
 // (comparable to a car keeping "Sport mode" untranslated) - confirmed with the user directly.
-private val RIDING_MODE_LABELS: Map<Long, String> = mapOf(11L to "Walk", 2L to "Drive", 3L to "Sport")
+// 11 = Walk on the 5 series; 1 = Walk and 4 = Boost on the models with their own table (FamilyAProfiles).
+private val RIDING_MODE_LABELS: Map<Long, String> = mapOf(11L to "Walk", 1L to "Walk", 2L to "Drive", 3L to "Sport", 4L to "Boost")
 
 fun enumLabel(propertyName: String, value: Long, lang: Lang): String? =
     if (propertyName == "RIDING_MODE") RIDING_MODE_LABELS[value]
