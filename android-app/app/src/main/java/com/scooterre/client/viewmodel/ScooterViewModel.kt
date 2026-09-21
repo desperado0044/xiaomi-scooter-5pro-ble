@@ -66,26 +66,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 // Deliberately left blank rather than pre-filled with a real device's MAC - this is a public
 // build meant for anyone's own scooter, not just the one it was originally developed against.
 const val DEFAULT_SCOOTER_MAC = ""
-private const val KEY_LAST_MAC = "last_mac"
-private const val KEY_LANG = "lang"
-private const val KEY_THEME_MODE = "theme_mode"
-private const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
-private const val KEY_AUTO_BRIGHTNESS = "auto_brightness"
-private const val KEY_UNITS = "units"
-private const val KEY_AUTO_CONNECT = "auto_connect"
-private const val KEY_LAST_CONNECTED = "last_connected_mac"
-private const val KEY_REFRESH_RATE = "refresh_rate"
-private const val KEY_CONFIRM_CRITICAL = "confirm_critical"
-private const val KEY_RIDE_TRACKING = "ride_tracking"
-private const val KEY_UPDATE_CHECK = "update_check"
-private const val KEY_APP_LOCK = "app_lock"
-private const val KEY_LAST_BACKUP = "last_backup_millis"
-private const val KEY_UPDATE_LAST_CHECK = "update_last_check"
-private const val KEY_UPDATE_TAG = "update_latest_tag"
-private const val KEY_UPDATE_URL = "update_latest_url"
-private const val KEY_UPDATE_APK_URL = "update_latest_apk"
-private const val KEY_UPDATE_APK_SHA = "update_latest_apk_sha"
-private const val UPDATE_CHECK_INTERVAL_MS = 24L * 60 * 60 * 1000
 
 /** Polled every ~2.5s (see [ScooterViewModel.startAutoRefresh]) while actually riding, instead of
  * the full ~50-property table - small enough that one pass stays well inside that window even
@@ -97,85 +77,6 @@ private val RIDE_PRIORITY_PROPERTIES = setOf(
 )
 
 /** Pause between full property sweeps while parked (a sweep itself takes ~9s on top). */
-enum class RefreshRate(val idleDelayMs: Long) { ECONOMY(30_000L), NORMAL(10_000L), FAST(3_000L) }
-
-enum class Screen { LOGIN, DASHBOARD, DEVICE_PICKER, APP_SETTINGS, DOCUMENTS, DOCUMENT_VIEWER }
-
-data class UiState(
-    val screen: Screen = Screen.LOGIN,
-    val language: Lang = resolveLang(null),
-    val themeMode: ThemeMode = ThemeMode.SYSTEM,
-    val keepScreenOn: Boolean = true,
-    val autoBrightness: Boolean = false,
-    val units: UnitSystem = UnitSystem.METRIC,
-    val autoConnect: Boolean = false,
-    val refreshRate: RefreshRate = RefreshRate.NORMAL,
-    val confirmCritical: Boolean = false,
-    val rideTracking: Boolean = true,
-    val updateCheck: Boolean = true,
-    // App lock (opt-in, default off): asks for fingerprint/PIN once per app start.
-    val appLock: Boolean = false,
-    val locked: Boolean = false,
-    // Insurance-plate reminders (opt-in): the end of the running plate period and the scooters
-    // already ticked off ("new insurance applied for") for it.
-    val insuranceReminder: Boolean = false,
-    val insuranceExpiry: java.time.LocalDate = InsuranceSchedule.expiryFor(java.time.LocalDate.now()),
-    val insuranceApplied: Set<String> = emptySet(),
-    val lastBackupMillis: Long = 0L,
-    val backupMessage: String? = null,
-    val availableUpdate: UpdateInfo? = null,
-    // "Download update": progress 0..100 while downloading, ready once the file is downloaded and
-    // verified, and what went wrong (the file is then discarded).
-    val updateProgress: Int? = null,
-    val updateReady: Boolean = false,
-    val updateNeedsPermission: Boolean = false,
-    val updateProblem: UpdateProblem? = null,
-    // Documents: which scooter's list is open, its documents, the one shown full screen, and the
-    // per-scooter counts shown on the device list.
-    val documentsMac: String? = null,
-    val documents: List<ScooterDocument> = emptyList(),
-    val viewerDocId: String? = null,
-    val documentCounts: Map<String, Int> = emptyMap(),
-    val docsMessage: String? = null,
-    val macAddress: String = DEFAULT_SCOOTER_MAC,
-    // Preferably the name from the Xiaomi cloud account (finishCloudLogin), falling back to the
-    // BLE-advertised name if picked from a scan, or null for a generic label in the dashboard.
-    val deviceName: String? = null,
-    // Xiaomi cloud model string (e.g. "xiaomi.scooter.5max") for the device currently being
-    // added/connected - drives both the displayed model name and which SpecProfile applies.
-    val activeModel: String? = null,
-    val activeSpecProfile: SpecProfile = SpecProfiles.SCOOTER_5_PRO,
-    // Every scooter this app has ever connected to (MAC + cosmetic model/name) - shown on the
-    // DEVICE_PICKER screen so more than one can be kept side by side instead of one swappable slot.
-    val knownDevices: List<KnownDevice> = emptyList(),
-    val hasSavedLtmk: Boolean = false,
-    val busy: Boolean = false,
-    val busyMessage: String = "",
-    val error: String? = null,
-    val needsPin: Boolean = false,
-    val pin: String = "",
-    val qrPng: ByteArray? = null,
-    val qrLoginUrl: String? = null,
-    val qrWaiting: Boolean = false,
-    val values: Map<String, SpecReadResult> = emptyMap(),
-    val scanning: Boolean = false,
-    val scanResults: List<FoundDevice> = emptyList(),
-    // Set after exportDevice() - shown as a dialog with the text + a share button, so a second
-    // person authorized on the same physical scooter (e.g. a spouse) can add it on their phone
-    // without repeating the cloud login/PIN dance.
-    val exportCode: String? = null,
-    val exportMac: String? = null,
-    val importText: String = "",
-    // Set right after a fresh connect if the odometer/battery moved meaningfully since the last
-    // time this device was seen - the app has no background service, so it cannot know which
-    // riding mode was active during that gap; the UI asks the person who actually rode it instead
-    // of guessing. Null once resolved (attributed or explicitly skipped) - see BatteryHistoryStore.
-    val pendingRideDelta: PendingRideDelta? = null,
-    // Lifetime km ridden + real-world Wh/km per riding mode (11=Walk, 2=Drive, 3=Sport), shown on
-    // the "Verlauf" tab - a battery-health signal the device's own SOH% doesn't capture, since it
-    // reflects actual energy cost per km rather than the device's own internal estimate.
-    val efficiencyTotals: Map<Long, ModeEfficiencyTotals> = emptyMap(),
-)
 
 /**
  * Holds the ONE persistent [MiProtocol] session for the app's lifetime: connect+login happens
@@ -226,12 +127,58 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
                 }.map { it.mac }.toSet(),
                 lastBackupMillis = prefs.getLong(KEY_LAST_BACKUP, 0L),
                 documentCounts = known.associate { it.mac to documentStore.count(it.mac) },
-                availableUpdate = if (prefs.getBoolean(KEY_UPDATE_CHECK, true)) storedUpdate() else null,
+                availableUpdate = if (prefs.getBoolean(KEY_UPDATE_CHECK, true)) storedUpdate(prefs, installedVersionOf(application)) else null,
                 knownDevices = known,
             )
         }
     )
     val state: StateFlow<UiState> = _state
+
+    // Feature controllers (each in its own file) work on the same state and preferences; the public
+    // functions below just forward to them, so the screens keep calling the ViewModel as before.
+    private val shared = Shared(application, viewModelScope, _state, prefs)
+    private val settings = SettingsController(shared, onUnitsChanged = ::pushWidgetUpdate)
+    private val insurance = InsuranceController(shared, deviceRegistry)
+    private val documents = DocumentsController(shared, deviceRegistry, documentStore, ::pushScreen, insurance::insuranceAppliedNow)
+    private val updates = UpdateController(shared)
+    private val backups = BackupController(shared, deviceRegistry, documents, settings)
+
+    fun openDocuments(mac: String?) = documents.openDocuments(mac)
+    fun selectDocumentsDevice(mac: String) = documents.selectDocumentsDevice(mac)
+    fun openDocument(id: String) = documents.openDocument(id)
+    fun addDocumentPhotos(uris: List<Uri>, name: String) = documents.addDocumentPhotos(uris, name)
+    fun addDocumentFromUri(uri: Uri, name: String) = documents.addDocumentFromUri(uri, name)
+    fun appendDocumentPhotos(docId: String, uris: List<Uri>) = documents.appendDocumentPhotos(docId, uris)
+    fun renameDocument(docId: String, name: String) = documents.renameDocument(docId, name)
+    fun deleteDocument(docId: String) = documents.deleteDocument(docId)
+    fun importDocumentsBundle(uri: Uri) = documents.importDocumentsBundle(uri)
+
+    fun setThemeMode(mode: ThemeMode) = settings.setThemeMode(mode)
+    fun setAutoBrightness(enabled: Boolean) = settings.setAutoBrightness(enabled)
+    fun setLanguage(lang: Lang) = settings.setLanguage(lang)
+    fun setUnits(units: UnitSystem) = settings.setUnits(units)
+    fun setRefreshRate(rate: RefreshRate) = settings.setRefreshRate(rate)
+    fun setAutoConnect(enabled: Boolean) = settings.setAutoConnect(enabled)
+    fun setConfirmCritical(enabled: Boolean) = settings.setConfirmCritical(enabled)
+    fun setRideTracking(enabled: Boolean) = settings.setRideTracking(enabled)
+    fun setKeepScreenOn(enabled: Boolean) = settings.setKeepScreenOn(enabled)
+    fun toggleLanguage() = settings.toggleLanguage()
+    fun setAppLock(enabled: Boolean) = settings.setAppLock(enabled)
+
+    fun downloadUpdate() = updates.downloadUpdate()
+    fun installUpdate() = updates.installUpdate()
+    fun checkForUpdateOnStart() = updates.checkForUpdateOnStart()
+    fun setUpdateCheck(enabled: Boolean) = updates.setUpdateCheck(enabled)
+
+    fun refreshInsuranceState() = insurance.refreshInsuranceState()
+    fun setInsuranceReminder(enabled: Boolean) = insurance.setInsuranceReminder(enabled)
+    fun setInsuranceApplied(mac: String, applied: Boolean) = insurance.setInsuranceApplied(mac, applied)
+    fun sendInsuranceTest(): Boolean = insurance.sendInsuranceTest()
+
+    fun markBackupDone() = backups.markBackupDone()
+    fun dismissBackupMessage() = backups.dismissBackupMessage()
+    fun restoreBackup(uri: Uri, password: String?, withSettings: Boolean) = backups.restoreBackup(uri, password, withSettings)
+    fun importBundle(uri: Uri, password: String?) = backups.importBundle(uri, password)
 
     init {
         _state.update { it.copy(hasSavedLtmk = secureStore.loadLtmk(it.macAddress) != null) }
@@ -269,121 +216,6 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
 
     fun closeAppSettings() = navigateBack()
 
-    private fun refreshDocuments() {
-        val mac = _state.value.documentsMac
-        _state.update { st ->
-            st.copy(
-                documents = mac?.let(documentStore::list) ?: emptyList(),
-                documentCounts = deviceRegistry.list().associate { it.mac to documentStore.count(it.mac) },
-                // The notification's button can tick scooters off while the app is closed.
-                insuranceApplied = insuranceAppliedNow(),
-            )
-        }
-    }
-
-    /** Opens the documents of [mac] - or, with null, of the scooter used last (else the first one). */
-    fun openDocuments(mac: String?) {
-        val known = deviceRegistry.list()
-        val target = mac
-            ?: prefs.getString(KEY_LAST_CONNECTED, null)?.takeIf { last -> known.any { it.mac.equals(last, ignoreCase = true) } }
-            ?: known.firstOrNull()?.mac
-            ?: return
-        _state.update { it.copy(documentsMac = target, error = null, docsMessage = null) }
-        refreshDocuments()
-        pushScreen(Screen.DOCUMENTS)
-    }
-
-    fun selectDocumentsDevice(mac: String) {
-        _state.update { it.copy(documentsMac = mac, error = null, docsMessage = null) }
-        refreshDocuments()
-    }
-
-    fun openDocument(id: String) {
-        _state.update { it.copy(viewerDocId = id) }
-        pushScreen(Screen.DOCUMENT_VIEWER)
-    }
-
-    /** The first photo becomes the document, the rest are appended as further pages. */
-    fun addDocumentPhotos(uris: List<Uri>, name: String) = documentJob { mac ->
-        val resolver = getApplication<Application>().contentResolver
-        val first = uris.firstOrNull() ?: return@documentJob
-        val doc = documentStore.addImage(mac, name) { resolver.openInputStream(first) }
-        uris.drop(1).forEach { u -> documentStore.appendImage(mac, doc.id) { resolver.openInputStream(u) } }
-    }
-
-    fun addDocumentFromUri(uri: Uri, name: String) = documentJob { mac ->
-        val resolver = getApplication<Application>().contentResolver
-        if (resolver.getType(uri) == "application/pdf") {
-            documentStore.addPdf(mac, name) { resolver.openInputStream(uri) }
-        } else {
-            documentStore.addImage(mac, name) { resolver.openInputStream(uri) }
-        }
-    }
-
-    fun appendDocumentPhotos(docId: String, uris: List<Uri>) = documentJob { mac ->
-        val resolver = getApplication<Application>().contentResolver
-        uris.forEach { u -> documentStore.appendImage(mac, docId) { resolver.openInputStream(u) } }
-    }
-
-    fun renameDocument(docId: String, name: String) = documentJob { mac -> documentStore.rename(mac, docId, name) }
-
-    fun deleteDocument(docId: String) = documentJob { mac -> documentStore.delete(mac, docId) }
-
-    private fun documentJob(block: (String) -> Unit) {
-        val mac = _state.value.documentsMac ?: return
-        viewModelScope.launch {
-            try {
-                withContext(Dispatchers.IO) { block(mac) }
-                _state.update { it.copy(error = null) }
-            } catch (e: Exception) {
-                android.util.Log.e("ScooterVM", "document operation failed", e)
-                _state.update { it.copy(error = s.docsImportError) }
-            }
-            refreshDocuments()
-        }
-    }
-
-    fun setThemeMode(mode: ThemeMode) {
-        prefs.edit().putString(KEY_THEME_MODE, mode.name).apply()
-        _state.update { it.copy(themeMode = mode) }
-    }
-
-    fun setAutoBrightness(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_AUTO_BRIGHTNESS, enabled).apply()
-        _state.update { it.copy(autoBrightness = enabled) }
-    }
-
-    fun setLanguage(lang: Lang) {
-        prefs.edit().putString(KEY_LANG, lang.name).apply()
-        _state.update { it.copy(language = lang) }
-    }
-
-    fun setUnits(units: UnitSystem) {
-        prefs.edit().putString(KEY_UNITS, units.name).apply()
-        _state.update { it.copy(units = units) }
-        pushWidgetUpdate()
-    }
-
-    fun setRefreshRate(rate: RefreshRate) {
-        prefs.edit().putString(KEY_REFRESH_RATE, rate.name).apply()
-        _state.update { it.copy(refreshRate = rate) }
-    }
-
-    fun setAutoConnect(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_AUTO_CONNECT, enabled).apply()
-        _state.update { it.copy(autoConnect = enabled) }
-    }
-
-    fun setConfirmCritical(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_CONFIRM_CRITICAL, enabled).apply()
-        _state.update { it.copy(confirmCritical = enabled) }
-    }
-
-    fun setRideTracking(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_RIDE_TRACKING, enabled).apply()
-        _state.update { it.copy(rideTracking = enabled) }
-    }
-
     private var autoConnectAttempted = false
 
     /** Called once per process start (not on every recomposition, and not again after the user
@@ -399,83 +231,6 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         connectKnownDevice(device)
     }
 
-    private fun installedVersion(): String =
-        runCatching { getApplication<Application>().packageManager.getPackageInfo(getApplication<Application>().packageName, 0).versionName }
-            .getOrNull() ?: "0"
-
-    /** The newest release seen at the last check, but only if it is still newer than what is installed
-     * now - so the notice disappears by itself right after updating. */
-    private fun storedUpdate(): UpdateInfo? {
-        val tag = prefs.getString(KEY_UPDATE_TAG, null) ?: return null
-        val url = prefs.getString(KEY_UPDATE_URL, null) ?: return null
-        val apk = prefs.getString(KEY_UPDATE_APK_URL, null)
-        val sha = prefs.getString(KEY_UPDATE_APK_SHA, null)
-        return if (UpdateChecker.isNewer(tag, installedVersion())) UpdateInfo(tag, url, apk, sha) else null
-    }
-
-    private suspend fun refreshUpdateInfo(force: Boolean) {
-        if (!_state.value.updateCheck) return
-        val now = System.currentTimeMillis()
-        if (force || now - prefs.getLong(KEY_UPDATE_LAST_CHECK, 0L) >= UPDATE_CHECK_INTERVAL_MS) {
-            val latest = withContext(Dispatchers.IO) { UpdateChecker.fetchLatest() } ?: return
-            prefs.edit().putLong(KEY_UPDATE_LAST_CHECK, now).putString(KEY_UPDATE_TAG, latest.version).putString(KEY_UPDATE_URL, latest.url)
-                .putString(KEY_UPDATE_APK_URL, latest.apkUrl).putString(KEY_UPDATE_APK_SHA, latest.apkSha256).apply()
-        }
-        _state.update { it.copy(availableUpdate = storedUpdate()) }
-    }
-
-    private var downloadedUpdate: java.io.File? = null
-
-    /** The "Download update" button: downloads and checks the APK, then opens the system installer. */
-    fun downloadUpdate() {
-        val info = _state.value.availableUpdate ?: return
-        if (info.apkUrl == null || _state.value.updateProgress != null) return
-        val app = getApplication<Application>()
-        _state.update { it.copy(updateProgress = 0, updateProblem = null, updateReady = false, updateNeedsPermission = false) }
-        viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) {
-                UpdateInstaller.downloadAndVerify(app, info) { percent -> _state.update { it.copy(updateProgress = percent) } }
-            }
-            when (result) {
-                is UpdateDownloadResult.Ok -> {
-                    downloadedUpdate = result.file
-                    _state.update { it.copy(updateProgress = null, updateReady = true) }
-                    startUpdateInstall()
-                }
-                is UpdateDownloadResult.Failed -> _state.update { it.copy(updateProgress = null, updateProblem = result.problem) }
-            }
-        }
-    }
-
-    /** The "Install" button, shown once the update is downloaded (e.g. after allowing installs). */
-    fun installUpdate() = startUpdateInstall()
-
-    private fun startUpdateInstall() {
-        val file = downloadedUpdate?.takeIf { it.exists() }
-        if (file == null) {
-            _state.update { it.copy(updateReady = false) }
-            return
-        }
-        val app = getApplication<Application>()
-        when (UpdateInstaller.install(app, file)) {
-            UpdateInstaller.InstallStart.OPENED -> _state.update { it.copy(updateNeedsPermission = false) }
-            UpdateInstaller.InstallStart.NEEDS_PERMISSION -> {
-                _state.update { it.copy(updateNeedsPermission = true) }
-                UpdateInstaller.openInstallPermissionSettings(app)
-            }
-        }
-    }
-
-    fun checkForUpdateOnStart() {
-        viewModelScope.launch { refreshUpdateInfo(force = false) }
-    }
-
-    fun setUpdateCheck(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_UPDATE_CHECK, enabled).apply()
-        _state.update { it.copy(updateCheck = enabled, availableUpdate = if (enabled) storedUpdate() else null) }
-        if (enabled) viewModelScope.launch { refreshUpdateInfo(force = true) }
-    }
-
     private val afterUnlock = mutableListOf<() -> Unit>()
 
     /** Runs [action] now, or - while the app is locked - right after it gets unlocked. */
@@ -488,102 +243,6 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         val pending = afterUnlock.toList()
         afterUnlock.clear()
         pending.forEach { it() }
-    }
-
-    fun setAppLock(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_APP_LOCK, enabled).apply()
-        _state.update { it.copy(appLock = enabled) }
-    }
-
-    private fun insuranceAppliedNow(): Set<String> {
-        val app = getApplication<Application>()
-        val expiry = InsuranceSchedule.expiryFor(java.time.LocalDate.now())
-        return deviceRegistry.list().filter { InsuranceReminders.isApplied(app, it.mac, expiry) }.map { it.mac }.toSet()
-    }
-
-    /** Re-reads the ticked-off scooters (the notification's button changes them while the app is closed). */
-    fun refreshInsuranceState() {
-        _state.update { it.copy(insuranceApplied = insuranceAppliedNow(), insuranceExpiry = InsuranceSchedule.expiryFor(java.time.LocalDate.now())) }
-    }
-
-    fun setInsuranceReminder(enabled: Boolean) {
-        val app = getApplication<Application>()
-        InsuranceReminders.setEnabled(app, enabled)
-        _state.update {
-            it.copy(
-                insuranceReminder = enabled,
-                insuranceExpiry = InsuranceSchedule.expiryFor(java.time.LocalDate.now()),
-                insuranceApplied = insuranceAppliedNow(),
-            )
-        }
-        // Switching it on inside the reminder window should not wait for tomorrow's job.
-        if (enabled) viewModelScope.launch(Dispatchers.IO) { InsuranceReminders.checkAndNotify(app) }
-    }
-
-    fun setInsuranceApplied(mac: String, applied: Boolean) {
-        val expiry = InsuranceSchedule.expiryFor(java.time.LocalDate.now())
-        InsuranceReminders.setApplied(getApplication(), mac, expiry, applied)
-        _state.update { it.copy(insuranceExpiry = expiry, insuranceApplied = insuranceAppliedNow()) }
-    }
-
-    /** True if the sample notification went out (false: notifications are blocked for the app). */
-    fun sendInsuranceTest(): Boolean = InsuranceReminders.postTest(getApplication())
-
-    fun markBackupDone() {
-        val now = System.currentTimeMillis()
-        prefs.edit().putLong(KEY_LAST_BACKUP, now).apply()
-        _state.update { it.copy(lastBackupMillis = now) }
-    }
-
-    fun dismissBackupMessage() = _state.update { it.copy(backupMessage = null) }
-
-    /** Restores a full backup file; [withSettings] also re-applies the app settings stored in it. */
-    fun restoreBackup(uri: Uri, password: String?, withSettings: Boolean) {
-        viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) {
-                runCatching { getApplication<Application>().contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
-                    ?.let { BackupBundle.restore(getApplication(), it, password, withSettings) }
-            }
-            when (result) {
-                is BackupBundle.RestoreResult.Ok -> {
-                    reloadSettings()
-                    _state.update { it.copy(knownDevices = deviceRegistry.list()) }
-                    refreshDocuments()
-                    _state.update { it.copy(backupMessage = s.backupDone(result.devices, result.documents)) }
-                }
-                BackupBundle.RestoreResult.BadPassword -> _state.update { it.copy(backupMessage = s.importWrongPasswordError) }
-                BackupBundle.RestoreResult.TooLarge -> _state.update { it.copy(backupMessage = s.backupTooLarge) }
-                else -> _state.update { it.copy(backupMessage = s.importInvalidCodeError) }
-            }
-        }
-    }
-
-    private fun reloadSettings() {
-        _state.update {
-            it.copy(
-                language = resolveLang(prefs.getString(KEY_LANG, null)),
-                themeMode = runCatching { ThemeMode.valueOf(prefs.getString(KEY_THEME_MODE, null) ?: "SYSTEM") }.getOrDefault(ThemeMode.SYSTEM),
-                keepScreenOn = prefs.getBoolean(KEY_KEEP_SCREEN_ON, true),
-                autoBrightness = prefs.getBoolean(KEY_AUTO_BRIGHTNESS, false),
-                units = runCatching { UnitSystem.valueOf(prefs.getString(KEY_UNITS, null) ?: "METRIC") }.getOrDefault(UnitSystem.METRIC),
-                autoConnect = prefs.getBoolean(KEY_AUTO_CONNECT, false),
-                refreshRate = runCatching { RefreshRate.valueOf(prefs.getString(KEY_REFRESH_RATE, null) ?: "NORMAL") }.getOrDefault(RefreshRate.NORMAL),
-                confirmCritical = prefs.getBoolean(KEY_CONFIRM_CRITICAL, false),
-                rideTracking = prefs.getBoolean(KEY_RIDE_TRACKING, true),
-                updateCheck = prefs.getBoolean(KEY_UPDATE_CHECK, true),
-            )
-        }
-    }
-
-    fun setKeepScreenOn(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_KEEP_SCREEN_ON, enabled).apply()
-        _state.update { it.copy(keepScreenOn = enabled) }
-    }
-
-    fun toggleLanguage() {
-        val next = if (_state.value.language == Lang.DE) Lang.EN else Lang.DE
-        prefs.edit().putString(KEY_LANG, next.name).apply()
-        _state.update { it.copy(language = next) }
     }
 
     fun onMacChanged(mac: String) {
@@ -625,7 +284,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         documentStore.deleteAll(mac)
         batteryHistoryStore.clear(mac)
         _state.update { it.copy(knownDevices = deviceRegistry.list()) }
-        refreshDocuments()
+        documents.refreshDocuments()
     }
 
     /** Sets a user-chosen label for a saved device - the only way to tell two same-model-table
@@ -668,68 +327,6 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
                 knownDevices = deviceRegistry.list(),
                 screen = Screen.DEVICE_PICKER,
             )
-        }
-    }
-
-    /** Imports an export bundle file (key, name, documents, history); [password] is needed for an
-     * encrypted one. */
-    /** Imports a file picked on the add-scooter screen: one scooter's bundle, a full backup (new phone,
-     * family) or a documents-only file. A backup brings keys, names and documents, not the sender's settings. */
-    fun importBundle(uri: Uri, password: String?) {
-        viewModelScope.launch {
-            val app = getApplication<Application>()
-            val data = withContext(Dispatchers.IO) {
-                runCatching { app.contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
-            }
-            if (data == null) {
-                _state.update { it.copy(error = s.importInvalidCodeError) }
-                return@launch
-            }
-            fun done() {
-                _state.update { it.copy(importText = "", error = null, knownDevices = deviceRegistry.list(), screen = Screen.DEVICE_PICKER) }
-                refreshDocuments()
-            }
-            val plainFormat = if (DeviceBundle.kindOf(data) == DeviceBundle.Kind.PLAIN) BundleFormats.plainFormat(data) else null
-            when {
-                BundleCrypto.isBackup(data) || plainFormat == BackupBundle.FORMAT ->
-                    when (withContext(Dispatchers.IO) { BackupBundle.restore(app, data, password, withSettings = false) }) {
-                        is BackupBundle.RestoreResult.Ok -> done()
-                        BackupBundle.RestoreResult.BadPassword -> _state.update { it.copy(error = s.importWrongPasswordError) }
-                        BackupBundle.RestoreResult.TooLarge -> _state.update { it.copy(error = s.backupTooLarge) }
-                        else -> _state.update { it.copy(error = s.importInvalidCodeError) }
-                    }
-                plainFormat == DocumentsBundle.FORMAT ->
-                    when (withContext(Dispatchers.IO) { DocumentsBundle.import(app, data) }) {
-                        is DocumentsBundle.ImportResult.Ok -> done()
-                        DocumentsBundle.ImportResult.UnknownScooter -> _state.update { it.copy(error = s.docsUnknownScooter) }
-                        else -> _state.update { it.copy(error = s.importInvalidCodeError) }
-                    }
-                else ->
-                    when (withContext(Dispatchers.IO) { DeviceBundle.import(app, data, password) }) {
-                        is DeviceBundle.ImportResult.Ok -> done()
-                        DeviceBundle.ImportResult.BadPassword -> _state.update { it.copy(error = s.importWrongPasswordError) }
-                        else -> _state.update { it.copy(error = s.importInvalidCodeError) }
-                    }
-            }
-        }
-    }
-
-    /** A documents-only file picked in the documents screen: merged into the scooter with the same MAC. */
-    fun importDocumentsBundle(uri: Uri) {
-        viewModelScope.launch {
-            val app = getApplication<Application>()
-            val result = withContext(Dispatchers.IO) {
-                runCatching { app.contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
-                    ?.let { DocumentsBundle.import(app, it) }
-            }
-            when (result) {
-                is DocumentsBundle.ImportResult.Ok -> {
-                    refreshDocuments()
-                    _state.update { it.copy(docsMessage = s.docsReceived(result.added), error = null) }
-                }
-                DocumentsBundle.ImportResult.UnknownScooter -> _state.update { it.copy(error = s.docsUnknownScooter, docsMessage = null) }
-                else -> _state.update { it.copy(error = s.importInvalidCodeError, docsMessage = null) }
-            }
         }
     }
 
@@ -1005,7 +602,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         documentStore.deleteAll(mac)
         batteryHistoryStore.clear(mac)
         _state.update { it.copy(hasSavedLtmk = false, knownDevices = deviceRegistry.list()) }
-        refreshDocuments()
+        documents.refreshDocuments()
     }
 
     fun refreshAll() = launchBusy(s.readingValuesBusy) {
