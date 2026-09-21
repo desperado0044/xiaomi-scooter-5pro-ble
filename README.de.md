@@ -194,7 +194,8 @@ ist ein Hobbyprojekt.
   Fahrmodus auf — ohne Rückfragen. Sobald ein Modus 5 km hat, zeigt die Übersicht die Reichweite mit *deinem* Wh/km im
   aktuellen Modus (neuere Fahrten zählen mehr, so fällt ein alternder Akku auf) neben der Schätzung des Scooters.
   **Fahrten ohne Verbindung werden nicht aufgezeichnet**; wer das Handy nicht während der Fahrt verbindet, bekommt nur
-  die Schätzung des Scooters (Firmware). Der Tab „Verlauf" führt außerdem ein tägliches Akku-Gesundheits-Log
+  die Schätzung des Scooters (Firmware). Ein Schalter in den App-Einstellungen („Eigene Verbrauchsanalyse") schaltet das ab:
+  Es wird nichts aufgezeichnet, und nur die Werte des Scooters gelten. Der Tab „Verlauf" führt außerdem ein tägliches Akku-Gesundheits-Log
   (Gesundheit, Zyklen, Kilometerstand).
 - **Diagnose kopieren**: Ein Knopf in den App-Einstellungen kopiert App-, Handy- und Scooter-Modell, Einstellungen und die
   letzten Fehlermeldungen (ohne MAC-Adresse, Schlüssel und Dokumente) für eine Fehlermeldung.

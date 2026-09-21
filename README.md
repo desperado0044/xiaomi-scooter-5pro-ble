@@ -184,7 +184,8 @@ no promise of support or of a schedule — this is a hobby project.
   any questions. Once a mode has 5 km recorded, the overview shows the range at *your* Wh/km in the current mode
   (newer rides count more, so an ageing battery shows up), next to the scooter's own estimate. **Rides without
   a connection are not recorded**; if you do not connect during rides, you get only the scooter's own (firmware)
-  estimate. The Verlauf (history) tab also keeps a daily battery health log (health, cycles, odometer).
+  estimate. A switch in the app settings ("Own consumption analysis") turns this off: nothing is recorded and only the
+  scooter's own values are used. The Verlauf (history) tab also keeps a daily battery health log (health, cycles, odometer).
 - **Copy diagnostics**: one button in the app settings copies app, phone and scooter model, settings and the latest
   error messages (no MAC address, keys or documents) for a bug report.
 - **Send documents**: one tap sends a scooter's documents (without the key) to family members. On their phone the

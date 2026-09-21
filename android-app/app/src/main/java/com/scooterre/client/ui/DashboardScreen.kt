@@ -337,6 +337,7 @@ fun DashboardScreen(
 /** The range at the rider's own consumption in [mode] (see [RangeEstimate]), in the current units,
  * or null while the values or the recorded rides are missing. */
 private fun habitRangeKm(state: UiState, mode: Long, units: UnitSystem): Double? {
+    if (!state.rideTracking) return null
     val mah = state.values["REMAINING_BATTERY"]?.takeIf { it.ok }?.value as? Long ?: return null
     val voltage = (state.values["VOLTAGE"]?.takeIf { it.ok }?.value as? Float)?.let { it * 0.01 } ?: return null
     val km = RangeEstimate.rangeKm(RangeEstimate.remainingWh(mah, voltage), state.efficiencyTotals[mode]) ?: return null
@@ -572,7 +573,14 @@ private fun HistoryTabContent(state: UiState, s: AppStrings, onResetHistory: () 
     val locale = if (state.language == Lang.DE) java.util.Locale.GERMANY else java.util.Locale.US
     val units = LocalUnits.current
     Column(modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (state.efficiencyTotals.isEmpty()) {
+        if (!state.rideTracking) {
+            Text(
+                s.consumptionOffText,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 16.dp),
+            )
+        } else if (state.efficiencyTotals.isEmpty()) {
             Text(
                 s.noHistoryYetText,
                 style = MaterialTheme.typography.bodyMedium,
@@ -611,7 +619,7 @@ private fun HistoryTabContent(state: UiState, s: AppStrings, onResetHistory: () 
                 }
             }
         }
-        if (state.efficiencyTotals.isNotEmpty()) {
+        if (state.rideTracking && state.efficiencyTotals.isNotEmpty()) {
             Text(s.historyRangeHint, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (state.batteryLog.isNotEmpty()) {
