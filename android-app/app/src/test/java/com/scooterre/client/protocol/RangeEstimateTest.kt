@@ -1,6 +1,7 @@
 package com.scooterre.client.protocol
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -24,6 +25,14 @@ class RangeEstimateTest {
         assertNull(RangeEstimate.rangeKm(240.0, ModeEfficiencyTotals(4.9, 100.0)))
         assertNull(RangeEstimate.rangeKm(0.0, ModeEfficiencyTotals(50.0, 1000.0)))
         assertNotNull(RangeEstimate.rangeKm(240.0, ModeEfficiencyTotals(5.0, 100.0)))
+    }
+
+    @Test
+    fun ridesWithImplausibleConsumptionAreNotCounted() {
+        assertTrue(RangeEstimate.isPlausibleRide(10.0, 150.0))   // 15 Wh/km
+        assertFalse(RangeEstimate.isPlausibleRide(13.9, 37.0))   // 2.7 Wh/km: charged in between
+        assertFalse(RangeEstimate.isPlausibleRide(1.0, 200.0))   // 200 Wh/km
+        assertFalse(RangeEstimate.isPlausibleRide(0.0, 10.0))
     }
 
     @Test

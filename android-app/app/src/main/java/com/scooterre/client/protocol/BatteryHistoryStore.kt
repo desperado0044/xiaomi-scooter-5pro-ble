@@ -96,6 +96,11 @@ class BatteryHistoryStore(context: Context) {
         val avgVoltage = (ref.voltage + voltage) / 2.0
         val deltaWh = deltaMah / 1000.0 * avgVoltage
         if (deltaWh <= 0) return null
+        if (!RangeEstimate.isPlausibleRide(deltaKm, deltaWh)) {
+            // Not a ride worth counting (e.g. charged in between): measure from here on instead of asking.
+            saveReference(mac, ReferencePoint(System.currentTimeMillis(), totalMileageKm, remainingBatteryMah, voltage))
+            return null
+        }
         return PendingRideDelta(deltaKm, deltaWh, ref.timestamp)
     }
 
