@@ -15,6 +15,7 @@ import com.scooterre.client.cloud.QrLoginStart
 import com.scooterre.client.cloud.XiaomiCloudClient
 import com.scooterre.client.protocol.BackupBundle
 import com.scooterre.client.protocol.BatteryHistoryStore
+import com.scooterre.client.protocol.BatteryLogEntry
 import com.scooterre.client.protocol.DeviceBundle
 import com.scooterre.client.protocol.DeviceExport
 import com.scooterre.client.protocol.DeviceRegistry
@@ -141,4 +142,6 @@ data class UiState(
     // the "Verlauf" tab - a battery-health signal the device's own SOH% doesn't capture, since it
     // reflects actual energy cost per km rather than the device's own internal estimate.
     val efficiencyTotals: Map<Long, ModeEfficiencyTotals> = emptyMap(),
+    // Battery health (SOH, charge cycles) once per day and scooter, oldest first - shown on the Verlauf tab.
+    val batteryLog: List<BatteryLogEntry> = emptyList(),
 )

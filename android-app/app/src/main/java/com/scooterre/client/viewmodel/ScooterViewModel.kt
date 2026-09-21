@@ -619,7 +619,8 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
             _state.update { it.copy(values = it.values + (property.name to result)) }
         }
         checkPendingRide()
-        _state.update { it.copy(efficiencyTotals = batteryHistoryStore.totals(it.macAddress)) }
+        recordBatteryLog()
+        _state.update { it.copy(efficiencyTotals = batteryHistoryStore.totals(it.macAddress), batteryLog = batteryHistoryStore.dailyLog(it.macAddress)) }
         pushWidgetUpdate()
     }
 
@@ -671,6 +672,14 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         _state.update { it.copy(pendingRideDelta = delta) }
     }
 
+    /** Notes today's battery health and odometer for the Verlauf tab (one entry per day). */
+    private fun recordBatteryLog() {
+        val values = _state.value.values
+        fun long(name: String): Long? = values[name]?.takeIf { it.ok }?.value as? Long
+        val km = (values["TOTAL_MILEAGE"]?.takeIf { it.ok }?.value as? Float)?.let { it * 0.01 } ?: return
+        batteryHistoryStore.recordDaily(_state.value.macAddress, long("SOH"), long("NUMBER_OF_CYCLES"), km)
+    }
+
     /** The user answered the pending-ride dialog with the mode they mostly rode in - folds the
      * delta into that mode's lifetime total. [mode] is the raw RIDING_MODE value (11=Walk,
      * 2=Drive, 3=Sport), matching [com.scooterre.client.ui.CYCLE_VALUES]. */
@@ -696,7 +705,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     fun resetEfficiencyHistory() {
         val mac = _state.value.macAddress
         batteryHistoryStore.clear(mac)
-        _state.update { it.copy(efficiencyTotals = batteryHistoryStore.totals(mac)) }
+        _state.update { it.copy(efficiencyTotals = batteryHistoryStore.totals(mac), batteryLog = batteryHistoryStore.dailyLog(mac)) }
     }
 
     private fun currentOdometerReading(): Triple<Double, Long, Double>? {

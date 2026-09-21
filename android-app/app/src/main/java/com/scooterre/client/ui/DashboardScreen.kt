@@ -57,6 +57,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.scooterre.client.protocol.PendingRideDelta
+import com.scooterre.client.protocol.RangeEstimate
 import com.scooterre.client.protocol.SpecProfile
 import com.scooterre.client.protocol.SpecProperty
 import com.scooterre.client.protocol.SpecReadResult
@@ -339,6 +340,16 @@ fun DashboardScreen(
  * affiliation with Xiaomi and the PolyForm Noncommercial license's spirit of an independent,
  * from-scratch client. */
 @Composable
+/** The range at the rider's own consumption in [mode] (see [RangeEstimate]), in the current units,
+ * or null while the values or the recorded rides are missing. */
+private fun habitRangeKm(state: UiState, mode: Long, units: UnitSystem): Double? {
+    val mah = state.values["REMAINING_BATTERY"]?.takeIf { it.ok }?.value as? Long ?: return null
+    val voltage = (state.values["VOLTAGE"]?.takeIf { it.ok }?.value as? Float)?.let { it * 0.01 } ?: return null
+    val km = RangeEstimate.rangeKm(RangeEstimate.remainingWh(mah, voltage), state.efficiencyTotals[mode]) ?: return null
+    return units.distance(km)
+}
+
+@Composable
 private fun OverviewContent(
     state: UiState,
     s: AppStrings,
@@ -385,6 +396,14 @@ private fun OverviewContent(
         }
 
         ridingMode?.let { mode ->
+            habitRangeKm(state, mode, units)?.let { habit ->
+                val modeName = enumLabel("RIDING_MODE", mode, lang) ?: mode.toString()
+                Text(
+                    s.rangeByHabitFormat(modeName, "%.0f %s".format(java.util.Locale.US, habit, units.distanceUnit)),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             val modeLabel = enumLabel("RIDING_MODE", mode, lang) ?: mode.toString()
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -579,8 +598,35 @@ private fun HistoryTabContent(state: UiState, s: AppStrings, onResetHistory: () 
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        habitRangeKm(state, mode, units)?.let { habit ->
+                            Text(
+                                s.historyRangeFormat("%.0f %s".format(locale, habit, units.distanceUnit)),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
+            }
+        }
+        if (state.efficiencyTotals.isNotEmpty()) {
+            Text(s.historyRangeHint, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (state.batteryLog.isNotEmpty()) {
+            Text(s.batteryLogTitle, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 12.dp))
+            val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+            state.batteryLog.takeLast(8).reversed().forEach { e ->
+                val millis = java.time.LocalDate.ofEpochDay(e.epochDay).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+                Text(
+                    s.batteryLogEntryFormat(
+                        dateFormat.format(java.util.Date(millis)),
+                        e.soh?.let { "$it %" } ?: "–",
+                        e.cycles?.toString() ?: "–",
+                        "%.0f %s".format(locale, units.distance(e.km), units.distanceUnit),
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
         TextButton(onClick = { showResetConfirm = true }) { Text(s.resetHistoryButton) }
