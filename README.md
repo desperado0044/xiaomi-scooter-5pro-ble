@@ -41,8 +41,8 @@ disclaimer).
   export/import feature) — not for someone else's device without the owner's consent.
 - **Tested on the Xiaomi Electric Scooter 5 Pro and 5 Max** (BLE chip RTL8762C, firmware
   2.7.0_0015.x). The standard **Electric Scooter 5** (without "Pro"/"Max") **should work as
-  well**, but it has not been tested — for models the app does not recognize it uses the
-  5 Pro's property table.
+  well**, but it has not been tested. Other models: see "Supported models" below — **do not use the app with
+  a model that is not listed there as tested**, it could show wrong values or change the wrong settings.
 - **No speed limiter is bypassed.** This project deliberately implements **no** function to
   change the regional speed limit or to flash the motor-controller firmware — that would require
   physical ST-Link/SWD access to the motor controller and was intentionally not built, regardless
@@ -70,6 +70,28 @@ disclaimer).
 - **No support, no promise of continued development.** Xiaomi can
   change the protocol at any time via a firmware update and render this software non-functional,
   with no update to this repository to be expected.
+
+## Supported models
+
+| Model | Status |
+|---|---|
+| Electric Scooter **5 Pro**, **5 Max** | Tested (BLE chip RTL8762C, firmware 2.7.0_0015.x) |
+| Electric Scooter **5** (standard) | Should work (same group of models with a private property table), untested |
+| Electric Scooter **6 Max** | **Read-only**, experimental: assumed to match the 5 series, not confirmed |
+| **Elite, 5 Plus, 6, 6 Lite, 6 Pro, 6 Ultra** | **Not supported yet.** Their values are numbered differently; the app shows and changes nothing for them and only offers the read-only "Explore values" report |
+
+**Why these restrictions:** the app talks to the scooter through numbered values ("properties"). The numbers
+differ between models, and a wrong table would show wrong values or — worse — write to the wrong property. So the
+app writes only on models it knows, treats the 6 Max as read-only and blocks all changes on models it does not
+know. If the model is unknown (for example a scooter added from an export code), the first readings are checked
+and changes are blocked when they do not fit. **This check cannot recognise every case**: if an unknown scooter
+happens to answer plausibly, changes stay possible. Use only the tested models unless you accept that risk.
+
+**Feedback (optional):** if you own an untested or unsupported model, the app can help: in the app settings,
+"Explore values (read only)" asks the scooter which values it offers — without writing anything — and creates a
+text you can copy; "Copy diagnostics" adds app, phone and scooter model and the latest log. Both leave out serial
+numbers, keys and MAC addresses. Posting the text in an issue helps to add your model. There is no obligation, and
+no promise of support or of a schedule — this is a hobby project.
 
 ## Features
 

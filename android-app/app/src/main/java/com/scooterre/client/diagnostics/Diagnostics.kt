@@ -11,6 +11,7 @@ import java.util.Locale
  */
 object Diagnostics {
     private const val MAX_ERRORS = 15
+    private const val MAX_LOG = 60
     private const val MAX_ERROR_LENGTH = 200
 
     data class Info(
@@ -20,6 +21,7 @@ object Diagnostics {
         val settings: List<Pair<String, String>>,
         val scooter: String,
         val errors: List<Pair<Long, String>>,
+        val log: List<Pair<Long, String>> = emptyList(),
     )
 
     private val errors = ArrayDeque<Pair<Long, String>>()
@@ -35,8 +37,23 @@ object Diagnostics {
     @Synchronized
     fun recentErrors(): List<Pair<Long, String>> = errors.toList()
 
+    private val log = ArrayDeque<Pair<Long, String>>()
+
+    /** A step of what the app is doing (connect, login, model, checks) - the debug log in the diagnostics text. */
     @Synchronized
-    fun clearErrors() = errors.clear()
+    fun note(text: String, nowMillis: Long = System.currentTimeMillis()) {
+        log.addLast(nowMillis to redact(text).take(MAX_ERROR_LENGTH))
+        while (log.size > MAX_LOG) log.removeFirst()
+    }
+
+    @Synchronized
+    fun recentLog(): List<Pair<Long, String>> = log.toList()
+
+    @Synchronized
+    fun clearErrors() {
+        errors.clear()
+        log.clear()
+    }
 
     private val urlQuery = Regex("(https?://[^\\s?#]+)[?#]\\S*")
     private val email = Regex("[\\w.+-]+@[\\w-]+(\\.[\\w-]+)+")
@@ -66,6 +83,11 @@ object Diagnostics {
             appendLine("Recent errors:")
             val format = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.ROOT)
             info.errors.forEach { (time, message) -> appendLine("  ${format.format(Date(time))}  $message") }
+        }
+        if (info.log.isNotEmpty()) {
+            appendLine("Log:")
+            val format = SimpleDateFormat("HH:mm:ss", Locale.ROOT)
+            info.log.forEach { (time, message) -> appendLine("  ${format.format(Date(time))}  $message") }
         }
     }.trimEnd()
 }

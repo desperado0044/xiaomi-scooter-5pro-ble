@@ -48,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.scooterre.client.viewmodel.RefreshRate
+import com.scooterre.client.viewmodel.Screen
 import com.scooterre.client.viewmodel.UiState
 
 /** The app-wide settings as a screen of their own - reachable from the device list, so they work
@@ -90,6 +91,7 @@ data class SettingsActions(
     val onRestoreBackup: (Uri, String?, Boolean) -> Unit,
     val onBackupCreated: () -> Unit,
     val onDismissBackupMessage: () -> Unit,
+    val onExplore: () -> Unit,
 )
 
 @Composable
@@ -214,6 +216,10 @@ fun AppSettingsContent(state: UiState, s: AppStrings, settings: SettingsActions)
             TextButton(onClick = { copyDiagnostics(context, state); diagnosticsCopied = true }) { Text(s.diagnosticsButton) }
             if (diagnosticsCopied) {
                 Text(s.diagnosticsCopied, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (state.screen == Screen.DASHBOARD) {
+                TextButton(onClick = settings.onExplore) { Text(s.exploreButton) }
+                Text(s.exploreHint, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

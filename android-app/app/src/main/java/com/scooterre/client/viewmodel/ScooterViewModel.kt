@@ -22,8 +22,10 @@ import com.scooterre.client.protocol.DeviceRegistry
 import com.scooterre.client.protocol.DocumentStore
 import com.scooterre.client.protocol.KnownDevice
 import com.scooterre.client.protocol.MiProtocol
+import com.scooterre.client.protocol.ModelSupport
 import com.scooterre.client.protocol.ModeEfficiencyTotals
 import com.scooterre.client.protocol.PendingRideDelta
+import com.scooterre.client.protocol.PropertyExplorer
 import com.scooterre.client.protocol.ProtocolException
 import com.scooterre.client.protocol.ScooterDocument
 import com.scooterre.client.protocol.SecureStore
@@ -233,6 +235,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         val lastMac = prefs.getString(KEY_LAST_CONNECTED, null) ?: return
         val device = deviceRegistry.list().firstOrNull { it.mac.equals(lastMac, ignoreCase = true) } ?: return
         if (secureStore.loadLtmk(device.mac) == null) return
+        if (SpecProfiles.supportOf(device.model) == ModelSupport.UNSUPPORTED) return
         connectKnownDevice(device)
     }
 
@@ -475,6 +478,9 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private suspend fun connectAndLogin(mac: String, ltmk: ByteArray) {
+        val model = _state.value.activeModel
+        val support = SpecProfiles.supportOf(model)
+        Diagnostics.note("connect: model=${model ?: "-"} support=$support")
         // Any previous, still-open connection (from an earlier failed attempt this session) must
         // be torn down first - the scooter/BLE stack gets confused by multiple simultaneous GATT
         // clients from this app, silently dropping notifications instead of acking anything.
@@ -501,6 +507,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
             val p = try {
                 MiProtocol.connect(getApplication(), device)
             } catch (e: Exception) {
+                Diagnostics.note("connect attempt $attempt failed: ${e.javaClass.simpleName}: ${e.message}")
                 lastError = e
                 continue
             }
@@ -508,18 +515,29 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
                 updateBusyMessage(s.authenticatingBusy)
                 p.login(ltmk)
             } catch (e: Exception) {
+                Diagnostics.note("login attempt $attempt failed: ${e.javaClass.simpleName}: ${e.message}")
                 p.dispose()
                 lastError = e
                 continue
             }
+            Diagnostics.note("login ok (attempt $attempt)")
             protocol = p
-            val model = _state.value.activeModel
+            layoutChecked = false
+            if (support == ModelSupport.UNSUPPORTED) {
+                // Not this app's table: read only what the scooter offers, write nothing, then let go.
+                try {
+                    runExplorer(p.requireSpecClient())
+                } finally {
+                    disconnect()
+                }
+                return
+            }
             deviceRegistry.upsert(KnownDevice(mac = mac, model = model, name = _state.value.deviceName))
             prefs.edit().putString(KEY_LAST_CONNECTED, mac).apply()
             screenStack.clear()
             _state.update {
                 it.copy(
-                    screen = Screen.DASHBOARD, error = null,
+                    screen = Screen.DASHBOARD, error = null, layoutMismatch = false,
                     activeSpecProfile = SpecProfiles.forModel(model),
                     knownDevices = deviceRegistry.list(),
                 )
@@ -618,6 +636,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
             val result = withContext(Dispatchers.IO) { spec.get(property) }
             _state.update { it.copy(values = it.values + (property.name to result)) }
         }
+        checkLayout()
         checkPendingRide()
         recordBatteryLog()
         _state.update { it.copy(efficiencyTotals = batteryHistoryStore.totals(it.macAddress), batteryLog = batteryHistoryStore.dailyLog(it.macAddress)) }
@@ -672,6 +691,30 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         _state.update { it.copy(pendingRideDelta = delta) }
     }
 
+    private var layoutChecked = false
+
+    /** Once per connection: if the scooter *answers* every basic reading with a refusal ("no such property"), it does
+     * not use this app's property table (an unknown model, e.g. added without model information) - writing to it
+     * could change the wrong things, so changes are blocked and the person is told. A timeout says nothing about the
+     * table (a bad moment on the radio), so it is checked again on the next refresh instead. */
+    private fun checkLayout() {
+        if (layoutChecked) return
+        val values = _state.value.values
+        val results = listOf("BATTERY_LEVEL", "RIDING_MODE", "TOTAL_MILEAGE").mapNotNull { values[it] }
+        if (results.any { it.ok }) {
+            layoutChecked = true
+            Diagnostics.note("layout check: ok")
+        } else if (results.size == 3 && results.all { it.status != -1 }) {
+            layoutChecked = true
+            Diagnostics.note("layout check: the scooter refused all basic readings (status ${results.joinToString { "0x%04x".format(it.status and 0xFFFF) }})")
+            _state.update { it.copy(layoutMismatch = true, error = s.layoutMismatchError) }
+        } else {
+            Diagnostics.note("layout check: inconclusive (timeouts), will check again")
+        }
+    }
+
+    private fun writesBlocked() = _state.value.activeSpecProfile.readOnly || _state.value.layoutMismatch
+
     /** Notes today's battery health and odometer for the Verlauf tab (one entry per day). */
     private fun recordBatteryLog() {
         val values = _state.value.values
@@ -723,6 +766,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun setBoolProperty(property: SpecProperty, value: Boolean) = launchBusy(null) {
+        if (writesBlocked()) throw ProtocolException(s.writesBlockedError)
         val spec = protocol?.requireSpecClient() ?: return@launchBusy
         val status = withContext(Dispatchers.IO) { spec.set(property, encodeValue(SpecType.BOOL, if (value) 1L else 0L)) }
         // A write-only property (see SpecProfile.writeOnly) has no readable value to confirm
@@ -737,6 +781,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun setNumericProperty(property: SpecProperty, value: Long) = launchBusy(null) {
+        if (writesBlocked()) throw ProtocolException(s.writesBlockedError)
         val spec = protocol?.requireSpecClient() ?: return@launchBusy
         val status = withContext(Dispatchers.IO) { spec.set(property, encodeValue(property.type, value)) }
         refreshOneNow(spec, property)
@@ -747,6 +792,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
      * state+interval+remaining-days string) - [encodeValue] deliberately has no STRING overload
      * (see its own doc comment), so this writes the raw ASCII bytes directly instead. */
     fun setStringProperty(property: SpecProperty, value: String) = launchBusy(null) {
+        if (writesBlocked()) throw ProtocolException(s.writesBlockedError)
         val spec = protocol?.requireSpecClient() ?: return@launchBusy
         val status = withContext(Dispatchers.IO) { spec.set(property, value.toByteArray(Charsets.US_ASCII)) }
         // The scooter keeps answering GET with the old string for a moment after a SET (seen live
@@ -761,6 +807,21 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         val result = withContext(Dispatchers.IO) { spec.get(property) }
         _state.update { it.copy(values = it.values + (property.name to result)) }
     }
+
+    /** Reads every property of the scooter (never writes) and shows the result as a text to copy. */
+    fun exploreValues() = launchBusy(s.exploringBusy) {
+        val spec = protocol?.requireSpecClient() ?: return@launchBusy
+        runExplorer(spec)
+    }
+
+    private suspend fun runExplorer(spec: SpecClient) {
+        Diagnostics.note("explorer: start")
+        val probes = withContext(Dispatchers.IO) { PropertyExplorer.sweep(spec) { siid -> updateBusyMessage(s.exploringProgress(siid)) } }
+        Diagnostics.note("explorer: ${probes.count { it.status == 0 }} readable of ${probes.size}")
+        _state.update { it.copy(explorerReport = PropertyExplorer.report(probes)) }
+    }
+
+    fun dismissExplorer() = _state.update { it.copy(explorerReport = null) }
 
     fun dismissError() = _state.update { it.copy(error = null, needsPin = false) }
 

@@ -144,4 +144,8 @@ data class UiState(
     val efficiencyTotals: Map<Long, ModeEfficiencyTotals> = emptyMap(),
     // Battery health (SOH, charge cycles) once per day and scooter, oldest first - shown on the Verlauf tab.
     val batteryLog: List<BatteryLogEntry> = emptyList(),
+    // The first readings after connecting did not fit the property table (unknown model): changes are blocked.
+    val layoutMismatch: Boolean = false,
+    // The text of a read-only property sweep (see PropertyExplorer), shown in a dialog to copy.
+    val explorerReport: String? = null,
 )

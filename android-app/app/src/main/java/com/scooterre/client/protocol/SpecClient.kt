@@ -84,6 +84,8 @@ data class SpecProfile(
     val tabVehicleStatus: List<String>,
     val tabIdentification: List<String>,
     val tabRideLog: List<String>,
+    // Experimental models: values are shown, but nothing may be written (see SpecProfiles.supportOf).
+    val readOnly: Boolean = false,
 )
 
 /** Well-known properties from the MIoT spec, extracted from the Mi Home plugin by the
@@ -255,6 +257,19 @@ private object SpecProperties {
     val TAB_RIDE_LOG = listOf("LOG_1", "LOG_2", "LOG_3", "LOG_4", "LOG_5")
 }
 
+/** How far the app trusts its property table for a scooter model. */
+enum class ModelSupport {
+    /** Tested (5 Pro, 5 Max) or the same group without a public spec (Electric Scooter 5): read and write. */
+    FULL,
+
+    /** Same group as the 5 Pro/5 Max by Xiaomi's registry (private property table), but not confirmed: read only. */
+    READ_ONLY,
+
+    /** Publishes a spec whose values are numbered differently (Elite, 5 Plus, 6 / 6 Lite / 6 Pro / 6 Ultra ...):
+     * the 5 Pro table would show wrong values and write to the wrong properties, so the app does not connect. */
+    UNSUPPORTED,
+}
+
 /** Selects the right [SpecProfile] for a scooter model, keyed by the Xiaomi cloud's own model
  * string (e.g. `xiaomi.scooter.5max`, as returned alongside `did` from `findDeviceByMac`). */
 object SpecProfiles {
@@ -287,14 +302,24 @@ object SpecProfiles {
      * for the full sweep transcripts. */
     val SCOOTER_5_MAX = SCOOTER_5_PRO
 
-    /** Falls back to the 5 Pro's table for any unrecognized/unknown model string (including a
-     * plain "xiaomi.scooter.5" base model, never owned/tested by this project) rather than
-     * refusing to connect - this table has so far held up unchanged across two tested variants of
-     * the same scooter generation, so it's a reasonable starting point, just not a verified one
-     * for anything beyond the 5 Pro and 5 Max specifically. */
-    fun forModel(model: String?): SpecProfile = when (model) {
-        MODEL_5MAX -> SCOOTER_5_MAX
-        else -> SCOOTER_5_PRO
+    // Xiaomi's MIoT registry publishes no spec for these (device-info stub only), i.e. their table lives in
+    // the Mi Home plugin like the 5 Pro's. The plain Electric Scooter 5 appears as t2336 (its battery
+    // model) - the cloud may also call it "xiaomi.scooter.5".
+    private val FULL_MODELS = setOf(MODEL_5PRO, MODEL_5MAX, "xiaomi.scooter.t2336", "xiaomi.scooter.5")
+    private val READ_ONLY_MODELS = setOf("xiaomi.scooter.6max", "xiaomi.scooter.6plus")
+
+    /** No model known (e.g. a scooter added from an export code) counts as [ModelSupport.FULL]: the first
+     * readings after connecting are checked instead (see the view model's layout check). */
+    fun supportOf(model: String?): ModelSupport = when {
+        model.isNullOrBlank() || model in FULL_MODELS -> ModelSupport.FULL
+        model in READ_ONLY_MODELS -> ModelSupport.READ_ONLY
+        else -> ModelSupport.UNSUPPORTED
+    }
+
+    /** The 5 Pro's table for every model that [supportOf] lets through, read-only where it is not confirmed. */
+    fun forModel(model: String?): SpecProfile = when (supportOf(model)) {
+        ModelSupport.READ_ONLY -> SCOOTER_5_PRO.copy(readOnly = true)
+        else -> if (model == MODEL_5MAX) SCOOTER_5_MAX else SCOOTER_5_PRO
     }
 }
 

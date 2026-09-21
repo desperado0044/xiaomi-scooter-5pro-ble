@@ -34,6 +34,7 @@ fun diagnosticsReport(context: Context, state: UiState): String {
                 "connected=${state.screen == Screen.DASHBOARD}, saved=${state.knownDevices.size} " +
                 "(${state.knownDevices.mapNotNull { it.model }.distinct().joinToString().ifEmpty { "-" }})",
             errors = Diagnostics.recentErrors(),
+            log = Diagnostics.recentLog(),
         ),
     )
 }

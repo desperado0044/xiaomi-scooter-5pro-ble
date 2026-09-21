@@ -395,6 +395,14 @@ private fun OverviewContent(
             )
         }
 
+        if (state.activeSpecProfile.readOnly || state.layoutMismatch) {
+            Text(
+                if (state.layoutMismatch) s.layoutMismatchError else s.readOnlyNotice,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+
         ridingMode?.let { mode ->
             habitRangeKm(state, mode, units)?.let { habit ->
                 val modeName = enumLabel("RIDING_MODE", mode, lang) ?: mode.toString()

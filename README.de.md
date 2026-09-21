@@ -42,8 +42,9 @@ Fassung dieses Ausschlusses).
   Export/Import-Funktion) gehören — nicht für fremde Geräte ohne Zustimmung des Eigentümers.
 - **Getestet am Xiaomi Electric Scooter 5 Pro und 5 Max** (BLE-Chip RTL8762C, Firmware
   2.7.0_0015.x). Der normale **Electric Scooter 5** (ohne „Pro"/„Max") **sollte ebenfalls
-  funktionieren**, wurde aber nicht getestet — die App verwendet für nicht erkannte
-  Modelle die 5-Pro-Tabelle.
+  funktionieren**, wurde aber nicht getestet. Weitere Modelle: siehe „Unterstützte Modelle" unten — **nutze die
+  App nicht mit einem Modell, das dort nicht als getestet steht**, sie könnte falsche Werte zeigen oder die falschen
+  Einstellungen ändern.
 - **Keine Geschwindigkeitsbegrenzung wird umgangen.** Dieses Projekt implementiert bewusst
   **keine** Funktion zum Ändern der regionalen Geschwindigkeitsbegrenzung oder zum Beschreiben
   der Motorsteuerungs-Firmware — das würde physischen ST-Link/SWD-Zugriff auf den Motorcontroller
@@ -75,6 +76,30 @@ Fassung dieses Ausschlusses).
 - **Kein Support, keine Zusicherung von Weiterentwicklung.**
   Xiaomi kann das Protokoll jederzeit per Firmware-Update ändern und diese Software funktionsunfähig
   machen, ohne dass eine Aktualisierung dieses Repositories zu erwarten ist.
+
+## Unterstützte Modelle
+
+| Modell | Stand |
+|---|---|
+| Electric Scooter **5 Pro**, **5 Max** | Getestet (BLE-Chip RTL8762C, Firmware 2.7.0_0015.x) |
+| Electric Scooter **5** (normal) | Sollte funktionieren (gleiche Modellgruppe mit privater Wertetabelle), ungetestet |
+| Electric Scooter **6 Max** | **Nur lesend**, experimentell: vermutlich wie die 5er-Reihe, nicht bestätigt |
+| **Elite, 5 Plus, 6, 6 Lite, 6 Pro, 6 Ultra** | **Noch nicht unterstützt.** Ihre Werte sind anders nummeriert; die App zeigt und ändert für sie nichts und bietet nur den rein lesenden Bericht „Werte erkunden" |
+
+**Warum diese Einschränkungen:** Die App spricht mit dem Scooter über nummerierte Werte („Properties"). Die Nummern
+unterscheiden sich je Modell, und eine falsche Tabelle würde falsche Werte zeigen oder — schlimmer — auf das falsche
+Property schreiben. Deshalb schreibt die App nur bei bekannten Modellen, behandelt den 6 Max nur lesend und sperrt
+alle Änderungen bei unbekannten Modellen. Ist das Modell unbekannt (z. B. per Exportcode hinzugefügt), werden die
+ersten Messwerte geprüft und Änderungen gesperrt, wenn sie nicht passen. **Diese Prüfung erkennt nicht jeden Fall**:
+Antwortet ein unbekannter Scooter zufällig plausibel, bleiben Änderungen möglich. Nutze nur die getesteten Modelle,
+außer du nimmst dieses Risiko in Kauf.
+
+**Rückmeldung (freiwillig):** Wenn du ein ungetestetes oder nicht unterstütztes Modell besitzt, kann die App helfen:
+In den App-Einstellungen fragt „Werte erkunden (nur lesen)" den Scooter, welche Werte er anbietet — ohne etwas zu
+schreiben — und erzeugt einen Text zum Kopieren; „Diagnose kopieren" ergänzt App-, Handy- und Scooter-Modell und das
+letzte Protokoll. Beides lässt Seriennummern, Schlüssel und MAC-Adressen weg. Den Text in einem Issue zu posten hilft,
+dein Modell aufzunehmen. Es gibt keine Verpflichtung und kein Versprechen auf Unterstützung oder einen Zeitplan — es
+ist ein Hobbyprojekt.
 
 ## Funktionsumfang
 

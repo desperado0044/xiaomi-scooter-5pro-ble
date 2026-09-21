@@ -101,6 +101,7 @@ fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
         onRestoreBackup = viewModel::restoreBackup,
         onBackupCreated = viewModel::markBackupDone,
         onDismissBackupMessage = viewModel::dismissBackupMessage,
+        onExplore = viewModel::exploreValues,
         onSetInsuranceReminder = { enable ->
             if (!enable) {
                 viewModel.setInsuranceReminder(false)
@@ -207,6 +208,7 @@ fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
                     Screen.DOCUMENTS -> DocumentsScreen(state, documentActions, viewModel::navigateBack)
                     Screen.DOCUMENT_VIEWER -> DocumentViewerScreen(state, documentActions, viewModel::navigateBack)
                 }
+                ExplorerDialog(state, viewModel::dismissExplorer)
             }
         }
     }
