@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.scooterre.client.ble.FoundDevice
 import com.scooterre.client.ble.ScooterScanner
 import com.scooterre.client.cloud.CloudDeviceMatch
+import com.scooterre.client.diagnostics.Diagnostics
 import com.scooterre.client.cloud.CloudException
 import com.scooterre.client.cloud.PinRequiredException
 import com.scooterre.client.cloud.QrLoginStart
@@ -58,6 +59,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -183,6 +186,8 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     init {
         _state.update { it.copy(hasSavedLtmk = secureStore.loadLtmk(it.macAddress) != null) }
         UpdateInstaller.cleanup(getApplication())
+        // The last error messages go into the copyable diagnostics text (see Diagnostics).
+        viewModelScope.launch { _state.map { it.error }.distinctUntilChanged().collect { message -> message?.let(Diagnostics::recordError) } }
         if (_state.value.insuranceReminder) {
             // Keep the daily job scheduled and catch up on a stage the job may have missed.
             val app = getApplication<Application>()

@@ -210,6 +210,11 @@ fun AppSettingsContent(state: UiState, s: AppStrings, settings: SettingsActions)
             TextButton(onClick = { uriHandler.openUri("https://github.com/desperado0044/xiaomi-scooter-5pro-ble") }) {
                 Text(s.aboutGithubButton)
             }
+            var diagnosticsCopied by remember { mutableStateOf(false) }
+            TextButton(onClick = { copyDiagnostics(context, state); diagnosticsCopied = true }) { Text(s.diagnosticsButton) }
+            if (diagnosticsCopied) {
+                Text(s.diagnosticsCopied, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }
