@@ -56,7 +56,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.scooterre.client.protocol.PendingRideDelta
 import com.scooterre.client.protocol.RangeEstimate
 import com.scooterre.client.protocol.SpecProfile
 import com.scooterre.client.protocol.SpecProperty
@@ -163,8 +162,6 @@ fun DashboardScreen(
     onSetBool: (SpecProperty, Boolean) -> Unit,
     onSetNumeric: (SpecProperty, Long) -> Unit,
     onSetString: (SpecProperty, String) -> Unit,
-    onAttributeRideMode: (Long) -> Unit,
-    onSkipPendingRide: () -> Unit,
     onResetHistory: () -> Unit,
     settings: SettingsActions,
 ) {
@@ -317,9 +314,6 @@ fun DashboardScreen(
         }
     }
 
-    state.pendingRideDelta?.let { delta ->
-        PendingRideDialog(delta, s, state.language, onAttributeRideMode, onSkipPendingRide)
-    }
 
     pendingConfirm?.let { (name, action) ->
         AlertDialog(
@@ -651,46 +645,6 @@ private fun HistoryTabContent(state: UiState, s: AppStrings, onResetHistory: () 
             dismissButton = { TextButton(onClick = { showResetConfirm = false }) { Text(s.cancelButton) } },
         )
     }
-}
-
-/** Shown right after connecting when the odometer moved since the last time this device was seen
- * - see [com.scooterre.client.protocol.BatteryHistoryStore.checkForPendingRide] for why the app
- * has to ask instead of just knowing. Mode labels reuse [enumLabel]'s existing RIDING_MODE names
- * (language-invariant, like a manufacturer preset name - same convention as the Settings tab's
- * cycle buttons), so this doesn't invent a second, inconsistent set of mode names. */
-@Composable
-private fun PendingRideDialog(
-    delta: PendingRideDelta,
-    s: AppStrings,
-    lang: Lang,
-    onAttributeRideMode: (Long) -> Unit,
-    onSkipPendingRide: () -> Unit,
-) {
-    val units = LocalUnits.current
-    val kmText = "%.1f %s".format(java.util.Locale.US, units.distance(delta.km), units.distanceUnit)
-    val whText = "%.0f".format(java.util.Locale.US, delta.wh)
-    val body = delta.sinceMillis?.let {
-        val since = java.text.SimpleDateFormat("dd.MM. HH:mm", java.util.Locale.getDefault()).format(java.util.Date(it))
-        s.pendingRideBody(kmText, whText, since)
-    } ?: s.pendingRideBodyNoSince(kmText, whText)
-    AlertDialog(
-        onDismissRequest = onSkipPendingRide,
-        title = { Text(s.pendingRideTitle) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(body)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    for (mode in listOf(11L, 2L, 3L)) {
-                        Button(onClick = { onAttributeRideMode(mode) }) {
-                            Text(enumLabel("RIDING_MODE", mode, lang) ?: mode.toString())
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onSkipPendingRide) { Text(s.pendingRideSkipButton) } },
-    )
 }
 
 @Composable

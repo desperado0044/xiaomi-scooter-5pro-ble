@@ -54,7 +54,7 @@ object DeviceBundle {
         val ltmk = SecureStore(context).loadLtmk(device.mac) ?: return false
         val docStore = DocumentStore(context)
         val docs = docStore.list(device.mac)
-        val (ref, totals) = BatteryHistoryStore(context).exportRaw(device.mac)
+        val totals = BatteryHistoryStore(context).exportTotalsRaw(device.mac)
 
         val manifest = JSONObject()
             .put("format", FORMAT)
@@ -62,7 +62,6 @@ object DeviceBundle {
             .put("ltmk", ltmk.joinToString("") { "%02x".format(it) })
         device.model?.let { manifest.put("model", it) }
         device.name?.let { manifest.put("name", it) }
-        ref?.let { manifest.put("efficiencyRef", JSONObject(it)) }
         totals?.let { manifest.put("efficiencyTotals", JSONObject(it)) }
         BatteryHistoryStore(context).exportLogRaw(device.mac)?.let { manifest.put("batteryLog", JSONArray(it)) }
         manifest.put(
@@ -121,7 +120,7 @@ object DeviceBundle {
             )
             SecureStore(context).saveLtmk(mac, ltmk)
             DeviceRegistry(context).upsert(device)
-            BatteryHistoryStore(context).importRaw(mac, manifest.optJSONObject("efficiencyRef")?.toString(), manifest.optJSONObject("efficiencyTotals")?.toString())
+            BatteryHistoryStore(context).importTotalsRaw(mac, manifest.optJSONObject("efficiencyTotals")?.toString())
             BatteryHistoryStore(context).importLogRaw(mac, manifest.optJSONArray("batteryLog")?.toString())
 
             val docStore = DocumentStore(context)

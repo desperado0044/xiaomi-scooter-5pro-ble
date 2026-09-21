@@ -4,6 +4,9 @@
 
 **An alternative Android app for the Xiaomi Electric Scooter 5 Pro / 5 Max (the standard 5 should work as well) — dashboard, ride modes, lock, battery and ride data over Bluetooth Low Energy, no Mi Home app needed.**
 
+Looking for the **Elite, 5 Plus or the 6 / 6 Lite / 6 Pro / 6 Max / 6 Ultra**? Those models are **not supported yet** — see
+[Supported models](#supported-models) for the status and how you can help.
+
 ---
 
 A standalone Android client with public source code (non-commercial license) for **Xiaomi Electric Scooter** 5-series models
@@ -176,9 +179,12 @@ no promise of support or of a schedule — this is a hobby project.
   this project's GitHub release page, checks its checksum and signature and opens the system installer, where you
   confirm. Nothing is ever installed silently. (Google Play Protect may offer to scan a new version once.)
 - **Find scooter**: makes the scooter beep and flash. It needs a switched-on scooter within Bluetooth range.
-- **Range at your own consumption**: once a riding mode has 5 km of recorded rides, the overview shows the range
-  at *your* Wh/km in the current mode (newer rides count more, so an ageing battery shows up), next to the
-  scooter's own estimate. The Verlauf (history) tab also keeps a daily battery health log (health, cycles, odometer).
+- **Range at your own consumption (live ride log)**: while your phone is connected to the scooter during a ride
+  and the app stays open ("Keep screen on" helps), the app records distance and energy per riding mode — without
+  any questions. Once a mode has 5 km recorded, the overview shows the range at *your* Wh/km in the current mode
+  (newer rides count more, so an ageing battery shows up), next to the scooter's own estimate. **Rides without
+  a connection are not recorded**; if you do not connect during rides, you get only the scooter's own (firmware)
+  estimate. The Verlauf (history) tab also keeps a daily battery health log (health, cycles, odometer).
 - **Copy diagnostics**: one button in the app settings copies app, phone and scooter model, settings and the latest
   error messages (no MAC address, keys or documents) for a bug report.
 - **Send documents**: one tap sends a scooter's documents (without the key) to family members. On their phone the

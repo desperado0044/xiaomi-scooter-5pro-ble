@@ -4,6 +4,9 @@
 
 **Alternative Android-App für den Xiaomi Electric Scooter 5 Pro / 5 Max (der normale 5 sollte ebenfalls funktionieren) — Dashboard, Fahrmodi, Sperre, Akku- und Fahrdaten direkt per Bluetooth, ohne Mi-Home-App.**
 
+Du suchst den **Elite, 5 Plus oder den 6 / 6 Lite / 6 Pro / 6 Max / 6 Ultra**? Diese Modelle werden **noch nicht unterstützt** — Stand und
+Mithilfe siehe [Unterstützte Modelle](#unterstützte-modelle).
+
 ---
 
 Ein eigenständiger Android-Client mit einsehbarem Quellcode (nicht-kommerzielle Lizenz) für **Xiaomi Electric Scooter** der 5er-Reihe
@@ -186,9 +189,13 @@ ist ein Hobbyprojekt.
   GitHub-Release-Seite dieses Projekts, prüft Prüfsumme und Signatur und öffnet den Installer des Systems, in dem du
   bestätigst. Es wird nie etwas still installiert. (Google Play Protect bietet bei einer neuen Version einmal einen Scan an.)
 - **Scooter suchen**: lässt den Scooter piepen und blinken. Er muss dafür eingeschaltet und in Bluetooth-Reichweite sein.
-- **Reichweite nach eigenem Verbrauch**: Sobald ein Fahrmodus 5 km aufgezeichnete Fahrten hat, zeigt die Übersicht die
-  Reichweite mit *deinem* Wh/km im aktuellen Modus (neuere Fahrten zählen mehr, so fällt ein alternder Akku auf) neben der
-  Schätzung des Scooters. Der Tab „Verlauf" führt außerdem ein tägliches Akku-Gesundheits-Log (Gesundheit, Zyklen, Kilometerstand).
+- **Reichweite nach eigenem Verbrauch (Live-Fahrtenlog)**: Solange dein Handy während der Fahrt mit dem Scooter
+  verbunden ist und die App offen bleibt („Bildschirm anlassen" hilft), zeichnet die App Strecke und Energie je
+  Fahrmodus auf — ohne Rückfragen. Sobald ein Modus 5 km hat, zeigt die Übersicht die Reichweite mit *deinem* Wh/km im
+  aktuellen Modus (neuere Fahrten zählen mehr, so fällt ein alternder Akku auf) neben der Schätzung des Scooters.
+  **Fahrten ohne Verbindung werden nicht aufgezeichnet**; wer das Handy nicht während der Fahrt verbindet, bekommt nur
+  die Schätzung des Scooters (Firmware). Der Tab „Verlauf" führt außerdem ein tägliches Akku-Gesundheits-Log
+  (Gesundheit, Zyklen, Kilometerstand).
 - **Diagnose kopieren**: Ein Knopf in den App-Einstellungen kopiert App-, Handy- und Scooter-Modell, Einstellungen und die
   letzten Fehlermeldungen (ohne MAC-Adresse, Schlüssel und Dokumente) für eine Fehlermeldung.
 - **Dokumente senden**: Ein Tipp schickt die Dokumente eines Scooters (ohne Schlüssel) an Familienmitglieder. Dort

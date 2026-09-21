@@ -183,8 +183,6 @@ fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
                         onSetBool = viewModel::setBoolProperty,
                         onSetNumeric = viewModel::setNumericProperty,
                         onSetString = viewModel::setStringProperty,
-                        onAttributeRideMode = viewModel::attributeRideMode,
-                        onSkipPendingRide = viewModel::skipPendingRide,
                         onResetHistory = viewModel::resetEfficiencyHistory,
                         settings = settingsActions,
                     )

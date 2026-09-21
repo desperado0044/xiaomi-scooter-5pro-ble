@@ -23,7 +23,6 @@ import com.scooterre.client.protocol.DocumentStore
 import com.scooterre.client.protocol.KnownDevice
 import com.scooterre.client.protocol.MiProtocol
 import com.scooterre.client.protocol.ModeEfficiencyTotals
-import com.scooterre.client.protocol.PendingRideDelta
 import com.scooterre.client.protocol.ProtocolException
 import com.scooterre.client.protocol.ScooterDocument
 import com.scooterre.client.protocol.SecureStore
@@ -133,11 +132,6 @@ data class UiState(
     val exportCode: String? = null,
     val exportMac: String? = null,
     val importText: String = "",
-    // Set right after a fresh connect if the odometer/battery moved meaningfully since the last
-    // time this device was seen - the app has no background service, so it cannot know which
-    // riding mode was active during that gap; the UI asks the person who actually rode it instead
-    // of guessing. Null once resolved (attributed or explicitly skipped) - see BatteryHistoryStore.
-    val pendingRideDelta: PendingRideDelta? = null,
     // Lifetime km ridden + real-world Wh/km per riding mode (11=Walk, 2=Drive, 3=Sport), shown on
     // the "Verlauf" tab - a battery-health signal the device's own SOH% doesn't capture, since it
     // reflects actual energy cost per km rather than the device's own internal estimate.

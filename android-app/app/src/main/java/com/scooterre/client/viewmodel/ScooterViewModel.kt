@@ -24,7 +24,7 @@ import com.scooterre.client.protocol.KnownDevice
 import com.scooterre.client.protocol.MiProtocol
 import com.scooterre.client.protocol.ModelSupport
 import com.scooterre.client.protocol.ModeEfficiencyTotals
-import com.scooterre.client.protocol.PendingRideDelta
+import com.scooterre.client.protocol.LiveRideTracker
 import com.scooterre.client.protocol.PropertyExplorer
 import com.scooterre.client.protocol.ProtocolException
 import com.scooterre.client.protocol.ScooterDocument
@@ -79,6 +79,8 @@ const val DEFAULT_SCOOTER_MAC = ""
  * slower full-sweep cadence). */
 private val RIDE_PRIORITY_PROPERTIES = setOf(
     "IS_RIDING", "AVERAGE_SPEED", "CURRENT_MILEAGE", "BATTERY_LEVEL", "REMAINING_MILEAGE", "RIDING_TIME", "RIDING_MODE",
+    // for the live ride log (see LiveRideTracker): odometer, remaining charge and voltage
+    "TOTAL_MILEAGE", "REMAINING_BATTERY", "VOLTAGE",
 )
 
 /** Pause between full property sweeps while parked (a sweep itself takes ~9s on top). */
@@ -523,6 +525,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
             Diagnostics.note("login ok (attempt $attempt)")
             protocol = p
             layoutChecked = false
+            liveRide.reset()
             if (support == ModelSupport.UNSUPPORTED) {
                 // Not this app's table: read only what the scooter offers, write nothing, then let go.
                 try {
@@ -587,6 +590,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
                         results[property.name] = withContext(Dispatchers.IO) { spec.get(property) }
                     }
                     _state.update { it.copy(values = it.values + results) }
+                    trackLiveRide()
                     pushWidgetUpdate()
                 } catch (e: Exception) {
                     android.util.Log.w("ScooterVM", "auto-refresh tick failed", e)
@@ -606,6 +610,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
      * need its automatic retry. */
     fun disconnect() {
         stopAutoRefresh()
+        liveRide.reset()
         protocol?.dispose()
         protocol = null
         screenStack.clear()
@@ -637,7 +642,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
             _state.update { it.copy(values = it.values + (property.name to result)) }
         }
         checkLayout()
-        checkPendingRide()
+        trackLiveRide()
         recordBatteryLog()
         _state.update { it.copy(efficiencyTotals = batteryHistoryStore.totals(it.macAddress), batteryLog = batteryHistoryStore.dailyLog(it.macAddress)) }
         pushWidgetUpdate()
@@ -668,16 +673,15 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    /** Runs once per connection, right after the first full [refreshAll] populates
-     * TOTAL_MILEAGE/REMAINING_BATTERY/VOLTAGE - compares them against the last known reading for
-     * this device (see [BatteryHistoryStore.checkForPendingRide]) and, if the odometer moved
-     * meaningfully since then, surfaces a dialog asking which riding mode that reflects. The app
-     * has no background service (see project research log), so it genuinely cannot know this on
-     * its own for a ride that happened while it was closed - asking beats silently guessing or
-     * silently discarding the distance/energy entirely. */
-    private fun checkPendingRide() {
-        if (!_state.value.rideTracking) return
-        val values = _state.value.values
+    private val liveRide = LiveRideTracker()
+
+    /** The live ride log (see [LiveRideTracker]): called with every fresh set of readings while connected. While the
+     * scooter is ridden, distance and energy are added to the totals of the riding mode that was active - without
+     * any question. Rides while the phone is not connected are not recorded. */
+    private fun trackLiveRide() {
+        val state = _state.value
+        if (!state.rideTracking || state.activeSpecProfile.readOnly || state.layoutMismatch) return
+        val values = state.values
         fun long(name: String): Long? = values[name]?.takeIf { it.ok }?.value as? Long
         fun float(name: String): Double? = when (val v = values[name]?.takeIf { it.ok }?.value) {
             is Float -> v.toDouble()
@@ -687,8 +691,10 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         val km = float("TOTAL_MILEAGE")?.let { it * 0.01 } ?: return
         val mah = long("REMAINING_BATTERY") ?: return
         val voltage = float("VOLTAGE")?.let { it * 0.01 } ?: return
-        val delta = batteryHistoryStore.checkForPendingRide(_state.value.macAddress, km, mah, voltage) ?: return
-        _state.update { it.copy(pendingRideDelta = delta) }
+        val segments = liveRide.onReading(LiveRideTracker.Reading(km, mah, voltage), riding = long("IS_RIDING") == 1L, currentMode = long("RIDING_MODE"))
+        if (segments.isEmpty()) return
+        segments.forEach { batteryHistoryStore.addRide(state.macAddress, it.mode, it.km, it.wh) }
+        _state.update { it.copy(efficiencyTotals = batteryHistoryStore.totals(it.macAddress)) }
     }
 
     private var layoutChecked = false
@@ -723,40 +729,12 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         batteryHistoryStore.recordDaily(_state.value.macAddress, long("SOH"), long("NUMBER_OF_CYCLES"), km)
     }
 
-    /** The user answered the pending-ride dialog with the mode they mostly rode in - folds the
-     * delta into that mode's lifetime total. [mode] is the raw RIDING_MODE value (11=Walk,
-     * 2=Drive, 3=Sport), matching [com.scooterre.client.ui.CYCLE_VALUES]. */
-    fun attributeRideMode(mode: Long) {
-        val delta = _state.value.pendingRideDelta ?: return
-        val (km, mah, voltage) = currentOdometerReading() ?: return
-        batteryHistoryStore.attributeRide(_state.value.macAddress, mode, delta, km, mah, voltage)
-        _state.update { it.copy(pendingRideDelta = null, efficiencyTotals = batteryHistoryStore.totals(it.macAddress)) }
-    }
-
-    /** The user dismissed the pending-ride dialog without picking a mode - the distance/energy is
-     * dropped (not counted toward any mode), but the reference point still advances so the same
-     * gap isn't asked about again on the next connect. */
-    fun skipPendingRide() {
-        if (_state.value.pendingRideDelta == null) return
-        val (km, mah, voltage) = currentOdometerReading() ?: return
-        batteryHistoryStore.skipPendingRide(_state.value.macAddress, km, mah, voltage)
-        _state.update { it.copy(pendingRideDelta = null) }
-    }
-
     /** Wipes the active device's accumulated efficiency totals - offered behind a confirmation
      * dialog in the UI, e.g. useful after a battery replacement. */
     fun resetEfficiencyHistory() {
         val mac = _state.value.macAddress
         batteryHistoryStore.clear(mac)
         _state.update { it.copy(efficiencyTotals = batteryHistoryStore.totals(mac), batteryLog = batteryHistoryStore.dailyLog(mac)) }
-    }
-
-    private fun currentOdometerReading(): Triple<Double, Long, Double>? {
-        val values = _state.value.values
-        val km = (values["TOTAL_MILEAGE"]?.takeIf { it.ok }?.value as? Float)?.let { it * 0.01 } ?: return null
-        val mah = values["REMAINING_BATTERY"]?.takeIf { it.ok }?.value as? Long ?: return null
-        val voltage = (values["VOLTAGE"]?.takeIf { it.ok }?.value as? Float)?.let { it * 0.01 } ?: return null
-        return Triple(km, mah, voltage)
     }
 
     fun refreshOne(property: SpecProperty) = launchBusy(null) {
