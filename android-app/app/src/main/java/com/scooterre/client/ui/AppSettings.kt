@@ -209,7 +209,7 @@ fun AppSettingsContent(state: UiState, s: AppStrings, settings: SettingsActions)
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp),
             )
-            TextButton(onClick = { uriHandler.openUri("https://github.com/desperado0044/xiaomi-scooter-5pro-ble") }) {
+            TextButton(onClick = { uriHandler.openUri("https://github.com/desperado0044/xiaomi-scooter-link") }) {
                 Text(s.aboutGithubButton)
             }
             var diagnosticsCopied by remember { mutableStateOf(false) }

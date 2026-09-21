@@ -1,4 +1,4 @@
-# Xiaomi Electric Scooter 5 / 5 Pro / 5 Max — Android-BLE-Client (Mi-Home-Alternative)
+# Scooter Link — Android-BLE-Client für Xiaomi Electric Scooter (Mi-Home-Alternative)
 
 **[English](README.md) | Deutsch**
 
@@ -214,7 +214,7 @@ Wiederholungsversuch bei kurzzeitigen Verbindungsproblemen.
 
 ## Erste Schritte
 
-1. APK aus den [Releases](https://github.com/desperado0044/xiaomi-scooter-5pro-ble/releases)
+1. APK aus den [Releases](https://github.com/desperado0044/xiaomi-scooter-link/releases)
    laden und installieren (Sideload, „unbekannte Quellen" erlauben; kein Play-Store-Release).
    Bluetooth-Berechtigung erlauben. Ab Version 2.2 ist die APK mit einem eigenen Release-Schlüssel
    signiert (Zertifikat-SHA-256 siehe „Bauen"). **Umstieg von 2.1 oder älter:** Diese Versionen waren

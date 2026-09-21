@@ -17,7 +17,7 @@ data class UpdateInfo(
 /** Looks up the newest published GitHub release of this project. Public API, no login; drafts and
  * pre-releases are never returned by `/releases/latest`. */
 object UpdateChecker {
-    private const val REPO = "desperado0044/xiaomi-scooter-5pro-ble"
+    private const val REPO = "desperado0044/xiaomi-scooter-link"
     private const val LATEST_URL = "https://api.github.com/repos/$REPO/releases/latest"
 
     /** The only place an APK is ever downloaded from. */

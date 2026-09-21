@@ -71,7 +71,7 @@ object Diagnostics {
         .replace(longToken, "<token>")
 
     fun build(info: Info): String = buildString {
-        appendLine("Scooter client diagnostics")
+        appendLine("Scooter Link diagnostics")
         appendLine("App: ${info.app}")
         appendLine("Android: ${info.android}")
         appendLine("Phone: ${info.phone}")
