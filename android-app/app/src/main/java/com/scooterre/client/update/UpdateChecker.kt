@@ -74,7 +74,7 @@ object UpdateChecker {
         return if (digest.startsWith("sha256:") && Regex("[0-9a-f]{64}").matches(hex)) hex else null
     }
 
-    /** True if [latest] is a higher dotted version than [installed] ("1.10" > "1.9", "v" prefix ignored). */
+    /** True if [latest] is a higher dotted version than [installed] ("1.10" > "1.9", "v" prefix ignored; "2.6" > "2.6-alpha1"). */
     fun isNewer(latest: String, installed: String): Boolean {
         fun parts(version: String) = version.removePrefix("v").split('.').map { it.takeWhile(Char::isDigit).toIntOrNull() ?: 0 }
         val a = parts(latest)
@@ -84,6 +84,6 @@ object UpdateChecker {
             val y = b.getOrElse(i) { 0 }
             if (x != y) return x > y
         }
-        return false
+        return '-' in installed && '-' !in latest
     }
 }

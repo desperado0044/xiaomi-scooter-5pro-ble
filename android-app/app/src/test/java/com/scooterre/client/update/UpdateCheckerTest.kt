@@ -62,6 +62,9 @@ class UpdateCheckerTest {
         assertFalse(UpdateChecker.isNewer("2.3", "2.3"))
         assertFalse(UpdateChecker.isNewer("2.2", "2.3"))
         assertFalse(UpdateChecker.isNewer("2.3", "2.3.1"))
+        assertTrue(UpdateChecker.isNewer("2.6", "2.6-alpha1"))
+        assertFalse(UpdateChecker.isNewer("2.6-alpha1", "2.6"))
+        assertFalse(UpdateChecker.isNewer("2.6-alpha1", "2.6-alpha1"))
     }
 
     @Test
