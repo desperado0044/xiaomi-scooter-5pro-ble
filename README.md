@@ -62,7 +62,9 @@ disclaimer).
   original camera photos do stay in your gallery, though. You are responsible for handling this
   personal data. Whether a digital copy is accepted at a check is up to the checking authority —
   this is not legal advice; carry the originals if in doubt.
-- **Backup and app lock.** Without the password a backup cannot be restored — there is no reset. The app
+- **Backup and app lock.** A backup password is optional. If you set one, the backup cannot be restored
+  without it — there is no reset. A backup without a password can be opened by anyone who gets the file
+  (it contains your scooter keys and documents), so only pass it on to people you trust. The app
   lock protects against casual access to the app's interface, but is no guarantee against targeted attacks
   on the phone.
 - **No support, no promise of continued development.** Xiaomi can
@@ -123,8 +125,8 @@ disclaimer).
   file, optionally encrypted with a password of your choice (AES-256). Import recognizes the file
   by itself and asks for the password if needed. The short text code (key only) remains for the
   quick case.
-- **Full backup** of all scooters in **one** encrypted file (keys, documents, history and app settings;
-  optional password, AES-256) under App settings → Backup. Restoring merges; the app settings can be
+- **Full backup** of all scooters in **one** file (keys, documents, history and app settings;
+  optional password, AES-256, and a protected file opens on any phone with the app) under App settings → Backup. Restoring merges; the app settings can be
   deselected while restoring.
 - Sign-in directly in the app: cloud login (password **or** QR code via Chrome Custom Tabs — also
   for accounts without a separate Xiaomi password, e.g. Google sign-in), BLE scan without
@@ -179,9 +181,10 @@ transient connection issues.
 3. Tap the scooter in the device list — the overview opens.
 4. Documents: "Documents" tile → Scan, Photos or File.
 5. Second phone (e.g. family): on the first phone "Export", share the file, on the second
-   "Add scooter" → "Choose file".
-6. New phone: on the old phone create a backup in the app settings (⚙️) under "Backup" (remember the
-   password) and move the file to the new phone. Install the app there and, already on the empty
+   "Add scooter" → "Choose file". To share only the documents, use "Send documents" in the documents
+   screen instead.
+6. New phone: on the old phone create a backup in the app settings (⚙️) under "Backup" (if you set a
+   password, remember it) and move the file to the new phone. Install the app there and, already on the empty
    "Add scooter" start screen, choose ⚙️ → Backup → "Restore" — no cloud login needed.
 
 ## License

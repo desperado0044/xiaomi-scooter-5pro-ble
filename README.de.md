@@ -67,8 +67,10 @@ Fassung dieses Ausschlusses).
   Umgang mit diesen personenbezogenen Daten bist du selbst verantwortlich. Ob eine digitale Kopie
   bei einer Kontrolle akzeptiert wird, entscheidet die kontrollierende Stelle — das ist keine
   Rechtsberatung; im Zweifel die Originale mitführen.
-- **Sicherung und App-Sperre.** Ohne das Passwort lässt sich eine Sicherung nicht wiederherstellen — es
-  gibt keine Rücksetzung. Die App-Sperre schützt vor zufälligem Zugriff auf die App-Oberfläche, ist aber
+- **Sicherung und App-Sperre.** Ein Sicherungs-Passwort ist optional. Wenn du eins setzt, lässt sich die
+  Sicherung ohne es nicht wiederherstellen — es gibt keine Rücksetzung. Eine Sicherung ohne Passwort kann
+  jeder öffnen, der die Datei bekommt (sie enthält deine Scooter-Schlüssel und Dokumente); gib sie also nur
+  an Vertraute weiter. Die App-Sperre schützt vor zufälligem Zugriff auf die App-Oberfläche, ist aber
   keine Garantie gegen gezielte Angriffe auf das Handy.
 - **Kein Support, keine Zusicherung von Weiterentwicklung.**
   Xiaomi kann das Protokoll jederzeit per Firmware-Update ändern und diese Software funktionsunfähig
@@ -128,8 +130,8 @@ Fassung dieses Ausschlusses).
   einer Datei, optional mit einem frei wählbaren Passwort verschlüsselt (AES-256). Der Import
   erkennt die Datei selbst und fragt bei Bedarf nach dem Passwort. Daneben gibt es weiter den
   kurzen Text-Code (nur Schlüssel) für den schnellen Fall.
-- **Gesamtsicherung** aller Scooter in **einer** verschlüsselten Datei (Schlüssel, Dokumente, Verlauf und
-  App-Einstellungen; Passwort optional, AES-256) unter App-Einstellungen → Sicherung. Wiederherstellen
+- **Gesamtsicherung** aller Scooter in **einer** Datei (Schlüssel, Dokumente, Verlauf und
+  App-Einstellungen; Passwort optional, AES-256, eine geschützte Datei öffnet sich auf jedem Handy mit der App) unter App-Einstellungen → Sicherung. Wiederherstellen
   führt zusammen; die App-Einstellungen lassen sich dabei abwählen.
 - Anmeldung direkt in der App: Cloud-Login (Passwort **oder** QR-Code über Chrome Custom Tabs —
   auch für Konten ohne eigenes Xiaomi-Passwort, z.B. bei Google-Anmeldung), BLE-Scan ohne
@@ -188,9 +190,10 @@ Wiederholungsversuch bei kurzzeitigen Verbindungsproblemen.
 3. Scooter in der Geräteliste antippen — die Übersicht öffnet sich.
 4. Dokumente: Kachel „Dokumente" → Scannen, Fotos oder Datei.
 5. Zweites Handy (z.B. Familie): am ersten Handy „Exportieren", Datei teilen, am zweiten
-   „Scooter hinzufügen" → „Datei auswählen".
+   „Scooter hinzufügen" → „Datei auswählen". Nur die Dokumente teilen geht mit „Dokumente senden" im
+   Dokumente-Bildschirm.
 6. Neues Handy: am alten Handy in den App-Einstellungen (⚙️) unter „Sicherung" eine Sicherung erstellen
-   (Passwort gut merken) und die Datei aufs neue Handy übertragen. Dort die App installieren und schon auf
+   (falls du ein Passwort setzt, gut merken) und die Datei aufs neue Handy übertragen. Dort die App installieren und schon auf
    der leeren Startseite „Scooter hinzufügen" über ⚙️ → Sicherung → „Wiederherstellen" wählen — ein
    Cloud-Login ist nicht nötig.
 
