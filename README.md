@@ -124,7 +124,7 @@ disclaimer).
   by itself and asks for the password if needed. The short text code (key only) remains for the
   quick case.
 - **Full backup** of all scooters in **one** encrypted file (keys, documents, history and app settings;
-  password required, AES-256) under App settings → Backup. Restoring merges; the app settings can be
+  optional password, AES-256) under App settings → Backup. Restoring merges; the app settings can be
   deselected while restoring.
 - Sign-in directly in the app: cloud login (password **or** QR code via Chrome Custom Tabs — also
   for accounts without a separate Xiaomi password, e.g. Google sign-in), BLE scan without
@@ -152,6 +152,9 @@ disclaimer).
   this project's GitHub release page, checks its checksum and signature and opens the system installer, where you
   confirm. Nothing is ever installed silently. (Google Play Protect may offer to scan a new version once.)
 - **Find scooter**: makes the scooter beep and flash. It needs a switched-on scooter within Bluetooth range.
+- **Send documents**: one tap sends a scooter's documents (without the key) to family members. On their phone the
+  file is picked with "File" in the documents screen and merged. A backup file can also be read in directly via
+  "Add scooter" (new phone, family).
 - The back gesture steps outward: close menu → overview → clean disconnect to the device list →
   leave the app. There is also a "Disconnect" button.
 

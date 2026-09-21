@@ -33,6 +33,9 @@ import com.scooterre.client.protocol.SpecProperty
 import com.scooterre.client.protocol.SpecReadResult
 import com.scooterre.client.protocol.SpecType
 import com.scooterre.client.protocol.encodeValue
+import com.scooterre.client.protocol.BundleCrypto
+import com.scooterre.client.protocol.BundleFormats
+import com.scooterre.client.protocol.DocumentsBundle
 import com.scooterre.client.reminder.InsuranceReminders
 import com.scooterre.client.reminder.InsuranceSchedule
 import com.scooterre.client.ui.Lang
@@ -133,6 +136,7 @@ data class UiState(
     val documents: List<ScooterDocument> = emptyList(),
     val viewerDocId: String? = null,
     val documentCounts: Map<String, Int> = emptyMap(),
+    val docsMessage: String? = null,
     val macAddress: String = DEFAULT_SCOOTER_MAC,
     // Preferably the name from the Xiaomi cloud account (finishCloudLogin), falling back to the
     // BLE-advertised name if picked from a scan, or null for a generic label in the dashboard.
@@ -284,13 +288,13 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
             ?: prefs.getString(KEY_LAST_CONNECTED, null)?.takeIf { last -> known.any { it.mac.equals(last, ignoreCase = true) } }
             ?: known.firstOrNull()?.mac
             ?: return
-        _state.update { it.copy(documentsMac = target, error = null) }
+        _state.update { it.copy(documentsMac = target, error = null, docsMessage = null) }
         refreshDocuments()
         pushScreen(Screen.DOCUMENTS)
     }
 
     fun selectDocumentsDevice(mac: String) {
-        _state.update { it.copy(documentsMac = mac, error = null) }
+        _state.update { it.copy(documentsMac = mac, error = null, docsMessage = null) }
         refreshDocuments()
     }
 
@@ -534,7 +538,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     fun dismissBackupMessage() = _state.update { it.copy(backupMessage = null) }
 
     /** Restores a full backup file; [withSettings] also re-applies the app settings stored in it. */
-    fun restoreBackup(uri: Uri, password: String, withSettings: Boolean) {
+    fun restoreBackup(uri: Uri, password: String?, withSettings: Boolean) {
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching { getApplication<Application>().contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
@@ -669,19 +673,62 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
 
     /** Imports an export bundle file (key, name, documents, history); [password] is needed for an
      * encrypted one. */
+    /** Imports a file picked on the add-scooter screen: one scooter's bundle, a full backup (new phone,
+     * family) or a documents-only file. A backup brings keys, names and documents, not the sender's settings. */
     fun importBundle(uri: Uri, password: String?) {
         viewModelScope.launch {
+            val app = getApplication<Application>()
+            val data = withContext(Dispatchers.IO) {
+                runCatching { app.contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
+            }
+            if (data == null) {
+                _state.update { it.copy(error = s.importInvalidCodeError) }
+                return@launch
+            }
+            fun done() {
+                _state.update { it.copy(importText = "", error = null, knownDevices = deviceRegistry.list(), screen = Screen.DEVICE_PICKER) }
+                refreshDocuments()
+            }
+            val plainFormat = if (DeviceBundle.kindOf(data) == DeviceBundle.Kind.PLAIN) BundleFormats.plainFormat(data) else null
+            when {
+                BundleCrypto.isBackup(data) || plainFormat == BackupBundle.FORMAT ->
+                    when (withContext(Dispatchers.IO) { BackupBundle.restore(app, data, password, withSettings = false) }) {
+                        is BackupBundle.RestoreResult.Ok -> done()
+                        BackupBundle.RestoreResult.BadPassword -> _state.update { it.copy(error = s.importWrongPasswordError) }
+                        BackupBundle.RestoreResult.TooLarge -> _state.update { it.copy(error = s.backupTooLarge) }
+                        else -> _state.update { it.copy(error = s.importInvalidCodeError) }
+                    }
+                plainFormat == DocumentsBundle.FORMAT ->
+                    when (withContext(Dispatchers.IO) { DocumentsBundle.import(app, data) }) {
+                        is DocumentsBundle.ImportResult.Ok -> done()
+                        DocumentsBundle.ImportResult.UnknownScooter -> _state.update { it.copy(error = s.docsUnknownScooter) }
+                        else -> _state.update { it.copy(error = s.importInvalidCodeError) }
+                    }
+                else ->
+                    when (withContext(Dispatchers.IO) { DeviceBundle.import(app, data, password) }) {
+                        is DeviceBundle.ImportResult.Ok -> done()
+                        DeviceBundle.ImportResult.BadPassword -> _state.update { it.copy(error = s.importWrongPasswordError) }
+                        else -> _state.update { it.copy(error = s.importInvalidCodeError) }
+                    }
+            }
+        }
+    }
+
+    /** A documents-only file picked in the documents screen: merged into the scooter with the same MAC. */
+    fun importDocumentsBundle(uri: Uri) {
+        viewModelScope.launch {
+            val app = getApplication<Application>()
             val result = withContext(Dispatchers.IO) {
-                runCatching { getApplication<Application>().contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
-                    ?.let { DeviceBundle.import(getApplication(), it, password) }
+                runCatching { app.contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
+                    ?.let { DocumentsBundle.import(app, it) }
             }
             when (result) {
-                is DeviceBundle.ImportResult.Ok -> {
-                    _state.update { it.copy(importText = "", error = null, knownDevices = deviceRegistry.list(), screen = Screen.DEVICE_PICKER) }
+                is DocumentsBundle.ImportResult.Ok -> {
                     refreshDocuments()
+                    _state.update { it.copy(docsMessage = s.docsReceived(result.added), error = null) }
                 }
-                DeviceBundle.ImportResult.BadPassword -> _state.update { it.copy(error = s.importWrongPasswordError) }
-                else -> _state.update { it.copy(error = s.importInvalidCodeError) }
+                DocumentsBundle.ImportResult.UnknownScooter -> _state.update { it.copy(error = s.docsUnknownScooter, docsMessage = null) }
+                else -> _state.update { it.copy(error = s.importInvalidCodeError, docsMessage = null) }
             }
         }
     }

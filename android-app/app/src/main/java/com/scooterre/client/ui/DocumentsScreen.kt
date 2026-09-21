@@ -20,6 +20,11 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
+import androidx.core.content.FileProvider
+import com.scooterre.client.protocol.DocumentsBundle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -60,6 +65,7 @@ data class DocumentActions(
     val onAppendPhotos: (String, List<Uri>) -> Unit,
     val onRename: (String, String) -> Unit,
     val onDelete: (String) -> Unit,
+    val onImportBundle: (Uri) -> Unit,
     val onSetInsuranceApplied: (String, Boolean) -> Unit,
 )
 
@@ -136,7 +142,10 @@ fun DocumentsScreen(state: UiState, actions: DocumentActions, onBack: () -> Unit
         }
     }
     val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
+        if (uri != null && isZipFile(context, uri)) {
+            // a documents file sent by a family member
+            actions.onImportBundle(uri)
+        } else if (uri != null) {
             val displayName = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
                 if (it.moveToFirst()) it.getString(0) else null
             }
@@ -194,6 +203,25 @@ fun DocumentsScreen(state: UiState, actions: DocumentActions, onBack: () -> Unit
         state.error?.let {
             Text("${s.errorPrefix}$it", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
         }
+        state.docsMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp)) }
+        if (documents.isNotEmpty() && mac != null) {
+            val sendScope = androidx.compose.runtime.rememberCoroutineScope()
+            TextButton(onClick = {
+                sendScope.launch {
+                    val file = withContext(Dispatchers.IO) {
+                        val dir = java.io.File(context.cacheDir, "export").apply { mkdirs(); listFiles()?.forEach { it.delete() } }
+                        java.io.File(dir, "scooter-documents.zip").also { f -> f.outputStream().use { DocumentsBundle.export(context, mac, it) } }
+                    }
+                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                    val send = Intent(Intent.ACTION_SEND).apply {
+                        type = "application/zip"
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(Intent.createChooser(send, s.shareButton))
+                }
+            }) { Text(s.docsSendButton) }
+        }
 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
             Button(onClick = { takePhoto() }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 8.dp)) {
@@ -205,7 +233,7 @@ fun DocumentsScreen(state: UiState, actions: DocumentActions, onBack: () -> Unit
                 contentPadding = PaddingValues(horizontal = 8.dp),
             ) { Text("🖼 ${s.docsFromPhotos}", maxLines = 1) }
             OutlinedButton(
-                onClick = { pickFile.launch(arrayOf("image/*", "application/pdf")) },
+                onClick = { pickFile.launch(arrayOf("image/*", "application/pdf", "application/zip", "application/x-zip-compressed", "application/octet-stream")) },
                 modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(horizontal = 8.dp),
             ) { Text("📁 ${s.docsImport}", maxLines = 1) }
@@ -319,3 +347,12 @@ fun DocumentsScreen(state: UiState, actions: DocumentActions, onBack: () -> Unit
         )
     }
 }
+
+/** True if the picked file is a ZIP (a documents file), as opposed to a PDF or an image. */
+private fun isZipFile(context: android.content.Context, uri: Uri): Boolean =
+    runCatching {
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            val head = ByteArray(2)
+            input.read(head) == 2 && head[0] == 'P'.code.toByte() && head[1] == 'K'.code.toByte()
+        }
+    }.getOrNull() == true

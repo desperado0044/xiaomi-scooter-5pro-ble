@@ -129,7 +129,7 @@ Fassung dieses Ausschlusses).
   erkennt die Datei selbst und fragt bei Bedarf nach dem Passwort. Daneben gibt es weiter den
   kurzen Text-Code (nur Schlüssel) für den schnellen Fall.
 - **Gesamtsicherung** aller Scooter in **einer** verschlüsselten Datei (Schlüssel, Dokumente, Verlauf und
-  App-Einstellungen; Passwort Pflicht, AES-256) unter App-Einstellungen → Sicherung. Wiederherstellen
+  App-Einstellungen; Passwort optional, AES-256) unter App-Einstellungen → Sicherung. Wiederherstellen
   führt zusammen; die App-Einstellungen lassen sich dabei abwählen.
 - Anmeldung direkt in der App: Cloud-Login (Passwort **oder** QR-Code über Chrome Custom Tabs —
   auch für Konten ohne eigenes Xiaomi-Passwort, z.B. bei Google-Anmeldung), BLE-Scan ohne
@@ -159,6 +159,9 @@ Fassung dieses Ausschlusses).
   GitHub-Release-Seite dieses Projekts, prüft Prüfsumme und Signatur und öffnet den Installer des Systems, in dem du
   bestätigst. Es wird nie etwas still installiert. (Google Play Protect bietet bei einer neuen Version einmal einen Scan an.)
 - **Scooter suchen**: lässt den Scooter piepen und blinken. Er muss dafür eingeschaltet und in Bluetooth-Reichweite sein.
+- **Dokumente senden**: Ein Tipp schickt die Dokumente eines Scooters (ohne Schlüssel) an Familienmitglieder. Dort
+  wird die Datei bei den Dokumenten mit „Datei" gewählt und zusammengeführt. Auch eine Sicherungsdatei lässt sich
+  direkt über „Scooter hinzufügen" einlesen (neues Handy, Familie).
 - Die Zurück-Geste geht stufenweise: Menü schließen → Übersicht → sauber trennen zur
   Geräteliste → App beenden. Zusätzlich gibt es den „Trennen"-Button.
 

@@ -16,8 +16,8 @@ import java.util.zip.ZipOutputStream
  * Restoring merges: keys/names come from the file, existing documents and history stay.
  */
 object BackupBundle {
-    private const val FORMAT = "scooterre-backup-v3"
-    private const val MAX_BYTES = 200L * 1024 * 1024
+    const val FORMAT = "scooterre-backup-v3"
+    private const val MAX_BYTES = 60L * 1024 * 1024
     private const val PREFS = "scooter_prefs"
 
     // App lock, last connected scooter and the update cache are deliberately not part of a backup.
@@ -34,7 +34,7 @@ object BackupBundle {
     }
 
     /** The encrypted backup, or null if it would exceed the size limit (built in memory). */
-    fun create(context: Context, password: String): ByteArray? {
+    fun create(context: Context, password: String?): ByteArray? {
         val registry = DeviceRegistry(context)
         val secure = SecureStore(context)
         val docs = DocumentStore(context)
@@ -68,14 +68,21 @@ object BackupBundle {
             zip.write(manifest.toString().toByteArray(Charsets.UTF_8))
             zip.closeEntry()
         }
-        return BundleCrypto.encrypt(zipBytes.toByteArray(), password)
+        val zip = zipBytes.toByteArray()
+        return if (password.isNullOrEmpty()) zip else BundleCrypto.encrypt(zip, password)
     }
 
     /** Checks and decrypts everything first; only then writes anything. */
-    fun restore(context: Context, data: ByteArray, password: String, withSettings: Boolean): RestoreResult {
+    fun restore(context: Context, data: ByteArray, password: String?, withSettings: Boolean): RestoreResult {
         if (data.size > MAX_BYTES + 1024 * 1024) return RestoreResult.TooLarge
-        if (!BundleCrypto.isBackup(data)) return RestoreResult.Invalid
-        val zipBytes = BundleCrypto.decrypt(data, password) ?: return RestoreResult.BadPassword
+        val zipBytes = when {
+            BundleCrypto.isBackup(data) -> {
+                if (password.isNullOrEmpty()) return RestoreResult.BadPassword
+                BundleCrypto.decrypt(data, password) ?: return RestoreResult.BadPassword
+            }
+            BundleFormats.plainFormat(data) != null -> data // a backup without password
+            else -> return RestoreResult.Invalid
+        }
         return try {
             val entries = mutableMapOf<String, ByteArray>()
             val budget = ZipBudget()

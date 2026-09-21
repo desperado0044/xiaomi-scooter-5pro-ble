@@ -14,8 +14,8 @@ android {
         applicationId = "com.scooterre.client"
         minSdk = 26 // AES/CCM via the platform provider needs API 26+ (Conscrypt)
         targetSdk = 35
-        versionCode = 15
-        versionName = "2.5"
+        versionCode = 16
+        versionName = "2.6-alpha1"
     }
 
     // Release signing key lives outside the repo: ~/.scooter-signing/keystore.properties

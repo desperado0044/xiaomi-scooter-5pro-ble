@@ -30,7 +30,7 @@ object DeviceBundle {
     private const val FORMAT = "scooterre-bundle-v2"
     private val MAGIC = "SCB2".toByteArray(Charsets.US_ASCII)
     private const val PBKDF2_ITERATIONS = 200_000
-    private val SAFE_NAME = Regex("[A-Za-z0-9._-]{1,80}")
+    internal val SAFE_NAME = Regex("[A-Za-z0-9._-]{1,80}")
 
     enum class Kind { ENCRYPTED, PLAIN, NONE }
 
@@ -41,7 +41,8 @@ object DeviceBundle {
     }
 
     fun kindOf(head: ByteArray): Kind = when {
-        head.size >= 4 && head.copyOf(4).contentEquals(MAGIC) -> Kind.ENCRYPTED
+        // SCB2 = one scooter, SCB3 = full backup (told apart by the importer)
+        head.size >= 4 && (head.copyOf(4).contentEquals(MAGIC) || head.copyOf(4).contentEquals("SCB3".toByteArray(Charsets.US_ASCII))) -> Kind.ENCRYPTED
         head.size >= 2 && head[0] == 'P'.code.toByte() && head[1] == 'K'.code.toByte() -> Kind.PLAIN
         else -> Kind.NONE
     }

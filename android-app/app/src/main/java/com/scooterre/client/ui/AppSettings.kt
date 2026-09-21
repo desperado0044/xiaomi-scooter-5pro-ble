@@ -87,7 +87,7 @@ data class SettingsActions(
     val onSetAppLock: (Boolean) -> Unit,
     val onSetInsuranceReminder: (Boolean) -> Unit,
     val onTestInsuranceNotification: () -> Unit,
-    val onRestoreBackup: (Uri, String, Boolean) -> Unit,
+    val onRestoreBackup: (Uri, String?, Boolean) -> Unit,
     val onBackupCreated: () -> Unit,
     val onDismissBackupMessage: () -> Unit,
 )
@@ -244,7 +244,7 @@ private fun BackupCard(state: UiState, s: AppStrings, settings: SettingsActions)
         var repeat by remember { mutableStateOf("") }
         var working by remember { mutableStateOf(false) }
         var error by remember { mutableStateOf<String?>(null) }
-        val valid = password.length >= 8 && password == repeat
+        val valid = password == repeat
         val fileName = "scooter-backup-" + java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date()) + ".zip"
         val saveLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
             if (uri != null) {
@@ -314,12 +314,17 @@ private fun BackupCard(state: UiState, s: AppStrings, settings: SettingsActions)
     restoreUri?.let { uri ->
         var password by remember(uri) { mutableStateOf("") }
         var withSettings by remember(uri) { mutableStateOf(true) }
+        // Only an encrypted backup needs a password; if the file cannot be read, ask for one anyway.
+        val encrypted = remember(uri) {
+            runCatching { context.contentResolver.openInputStream(uri)?.use { input -> ByteArray(4).also { input.read(it) } } }
+                .getOrNull()?.let(com.scooterre.client.protocol.BundleCrypto::isBackup) ?: true
+        }
         AlertDialog(
             onDismissRequest = { restoreUri = null },
             title = { Text(s.backupRestoreTitle) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text(s.importPasswordLabel) }, singleLine = true, visualTransformation = PasswordVisualTransformation())
+                    if (encrypted) OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text(s.importPasswordLabel) }, singleLine = true, visualTransformation = PasswordVisualTransformation())
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = withSettings, onCheckedChange = { withSettings = it })
                         Text(s.backupSettingsCheckbox, style = MaterialTheme.typography.bodyMedium)
@@ -327,7 +332,7 @@ private fun BackupCard(state: UiState, s: AppStrings, settings: SettingsActions)
                 }
             },
             confirmButton = {
-                TextButton(enabled = password.isNotEmpty(), onClick = { settings.onRestoreBackup(uri, password, withSettings); restoreUri = null }) { Text(s.backupRestore) }
+                TextButton(enabled = !encrypted || password.isNotEmpty(), onClick = { settings.onRestoreBackup(uri, if (encrypted) password else null, withSettings); restoreUri = null }) { Text(s.backupRestore) }
             },
             dismissButton = { TextButton(onClick = { restoreUri = null }) { Text(s.cancelButton) } },
         )
