@@ -183,12 +183,15 @@ no promise of support or of a schedule — this is a hobby project.
   load): the percentage the scooter already reports is enough, since the range estimate only ever divides the
   *current* percentage by it. Once a mode has 5 km recorded within the last 300 km (older rides roll out of that
   window, so an ageing battery or worn tyres show up on their own instead of being averaged in forever), the
-  overview's headline range card shows this instead of the scooter's own estimate, with the scooter's own value
-  named underneath for comparison. **Rides without a connection are not recorded**; if you do not connect during
-  rides, you only ever see the scooter's own (firmware) estimate. The switch in the app settings ("Own consumption
-  analysis", on by default) decides which of the two is the prominent one: on picks your own once there is enough
-  data, off always shows the scooter's estimate and records nothing. The Verlauf (history) tab lists it per mode
-  and also keeps a daily battery health log (health, cycles, odometer).
+  overview's headline range card shows this instead of the scooter's own estimate — for whichever riding mode is
+  currently active, switching automatically along with it — with the scooter's own value named underneath for
+  comparison. **Rides without a connection are not recorded**; if you do not connect during rides, you only ever see
+  the scooter's own (firmware) estimate. The switch in the app settings ("Own consumption analysis", on by default)
+  decides which of the two is the prominent one: on picks your own once there is enough data, off always shows the
+  scooter's estimate and records nothing. The Verlauf (history) tab lists it per mode and also keeps a daily battery
+  health log (health, cycles, odometer); a "Reset history" button there clears all recorded distance/consumption for
+  a fresh start after something like a battery replacement — the 300 km window already handles gradual wear on its
+  own, this is only for a sudden, one-off change.
 - **Copy diagnostics**: one button in the app settings copies app, phone and scooter model, settings and the latest
   error messages (no MAC address, keys or documents) for a bug report.
 - **Send documents**: one tap sends a scooter's documents (without the key) to family members. On their phone the

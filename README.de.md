@@ -194,12 +194,15 @@ ist ein Hobbyprojekt.
   Reichweitenschätzung immer nur den aktuellen Prozentwert dadurch teilt. Sobald ein Modus 5 km aus den letzten
   300 km hat (ältere Fahrten fallen aus diesem Fenster heraus, so fällt ein alternder Akku oder abgefahrene Reifen
   von selbst auf, statt für immer mit hineinzurechnen), zeigt die große Reichweiten-Kachel der Übersicht diesen
-  Wert statt der Scooter-Schätzung, mit der Scooter-Schätzung klein zum Vergleich darunter. **Fahrten ohne
-  Verbindung werden nicht aufgezeichnet**; wer das Handy nicht während der Fahrt verbindet, sieht immer nur die
-  Schätzung des Scooters (Firmware). Der Schalter in den App-Einstellungen („Eigene Verbrauchsanalyse", standardmäßig
-  an) entscheidet, welcher der beiden Werte groß angezeigt wird: an wählt den eigenen, sobald genug Daten da sind,
-  aus zeigt immer die Scooter-Schätzung und zeichnet nichts auf. Der Tab „Verlauf" listet ihn je Modus auf und
-  führt außerdem ein tägliches Akku-Gesundheits-Log (Gesundheit, Zyklen, Kilometerstand).
+  Wert statt der Scooter-Schätzung — für den gerade aktiven Fahrmodus, wechselt also automatisch mit diesem mit —
+  mit der Scooter-Schätzung klein zum Vergleich darunter. **Fahrten ohne Verbindung werden nicht aufgezeichnet**;
+  wer das Handy nicht während der Fahrt verbindet, sieht immer nur die Schätzung des Scooters (Firmware). Der
+  Schalter in den App-Einstellungen („Eigene Verbrauchsanalyse", standardmäßig an) entscheidet, welcher der beiden
+  Werte groß angezeigt wird: an wählt den eigenen, sobald genug Daten da sind, aus zeigt immer die
+  Scooter-Schätzung und zeichnet nichts auf. Der Tab „Verlauf" listet ihn je Modus auf und führt außerdem ein
+  tägliches Akku-Gesundheits-Log (Gesundheit, Zyklen, Kilometerstand); ein Knopf „Verlauf zurücksetzen" dort löscht
+  alle aufgezeichnete Strecke/Verbrauch für einen Neustart, z.B. nach einem Akkutausch — das 300-km-Fenster fängt
+  allmähliche Alterung schon von selbst ab, das ist nur für einen plötzlichen, einmaligen Wechsel gedacht.
 - **Diagnose kopieren**: Ein Knopf in den App-Einstellungen kopiert App-, Handy- und Scooter-Modell, Einstellungen und die
   letzten Fehlermeldungen (ohne MAC-Adresse, Schlüssel und Dokumente) für eine Fehlermeldung.
 - **Dokumente senden**: Ein Tipp schickt die Dokumente eines Scooters (ohne Schlüssel) an Familienmitglieder. Dort
