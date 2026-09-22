@@ -222,7 +222,12 @@ eigentliche BLE-Connect versucht wird – so verbindet es auch, wenn der Scooter
 nach dem Antippen eingeschaltet wird, statt in ein blindes Timeout zu laufen, das das nie
 mitbekommt. Die Geräte-Kachel zeigt das live an (grün, „Suche Scooter …" → „Verbinde …" →
 „Authentifiziere …") und wird bei einem endgültigen Fehlschlag rot mit dem Grund – unabhängig von
-einem sauberen manuellen Trennen (danach zeigt die Liste nie fälschlich eine rote Kachel).
+einem sauberen manuellen Trennen (danach zeigt die Liste nie fälschlich eine rote Kachel). Manche
+Android-BLE-Stacks können eine Verbindung verlieren, ohne das je zu melden (live bestätigt: die App
+hat für immer stumm weiterversucht und die letzten je gelesenen Werte angezeigt) – ein
+fehlgeschlagener Zugriff gilt jetzt sofort als verlorene Verbindung, statt sein volles Timeout
+abzuwarten, und die App kehrt mit klarem Grund zur Geräteliste zurück, statt still veraltete Daten
+zu zeigen.
 
 ## Erste Schritte
 

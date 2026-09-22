@@ -458,7 +458,13 @@ class SpecClient(private val ble: ScooterBleManager, private val keys: MiCrypto.
         }
 
         try {
-        ble.write(charFor(Registers.SPEC_WRITE), byteArrayOf(0, 0, PacketType.CTR.toByte(), Protocol.SPEC_CHANNEL.toByte(), (fc and 0xFF).toByte(), ((fc shr 8) and 0xFF).toByte()))
+        // If the GATT stack won't even start this write, the connection is dead (see
+        // ScooterBleManager.connectionLost's doc comment) - waiting out the full timeout for a
+        // reply that was never going to arrive just makes every property in a sweep take its
+        // full 8s for nothing, with the UI silently sitting on stale values the whole time.
+        if (!ble.write(charFor(Registers.SPEC_WRITE), byteArrayOf(0, 0, PacketType.CTR.toByte(), Protocol.SPEC_CHANNEL.toByte(), (fc and 0xFF).toByte(), ((fc shr 8) and 0xFF).toByte()))) {
+            return@coroutineScope null
+        }
 
         val deadline = System.currentTimeMillis() + timeoutMs
         var sentAll = false

@@ -246,6 +246,7 @@ data class AppStrings(
     val scooterNotFoundError: String,
     val tileConnectingText: String,
     val tileConnectFailedText: String,
+    val connectionLostError: String,
 )
 
 val STRINGS_DE = AppStrings(
@@ -488,6 +489,7 @@ val STRINGS_DE = AppStrings(
     scooterNotFoundError = "Scooter nicht gefunden - eingeschaltet und in Reichweite?",
     tileConnectingText = "Verbinde ...",
     tileConnectFailedText = "Verbindung nicht möglich",
+    connectionLostError = "Verbindung zum Scooter verloren",
 )
 
 val STRINGS_EN = AppStrings(
@@ -730,6 +732,7 @@ val STRINGS_EN = AppStrings(
     scooterNotFoundError = "Scooter not found - is it turned on and in range?",
     tileConnectingText = "Connecting ...",
     tileConnectFailedText = "Could not connect",
+    connectionLostError = "Lost connection to the scooter",
 )
 
 fun strings(lang: Lang): AppStrings = if (lang == Lang.DE) STRINGS_DE else STRINGS_EN

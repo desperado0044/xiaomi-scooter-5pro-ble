@@ -580,6 +580,21 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
             liveRide.reset()
             connectionScope?.cancel()
             connectionScope = CoroutineScope(viewModelScope.coroutineContext + SupervisorJob())
+            // Reacts to a connection dying underneath us (explicitly or - the common real-world
+            // case on some BLE stacks - silently, see ScooterBleManager.connectionLost's doc
+            // comment) instead of the previous behaviour: every read kept quietly failing and
+            // re-failing forever, the UI just sitting on the last values it ever saw with no
+            // indication anything was wrong (confirmed by the user, 2026-09-22: scooter at 100%,
+            // app still showing 95% from the last live reading, no error visible anywhere).
+            // first() (not collect) - one shot, since disconnect() below tears this scope down
+            // anyway, and a second emission during the same dying connection shouldn't retrigger.
+            connectionScope?.launch {
+                p.connectionLost.first()
+                if (protocol === p) {
+                    Diagnostics.note("connection lost (silent or explicit) - returning to device list")
+                    connectionDied(mac, s.connectionLostError)
+                }
+            }
             if (support == ModelSupport.UNSUPPORTED) {
                 // Not this app's table: read only what the scooter offers, write nothing, then let go.
                 try {
@@ -665,6 +680,16 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     private fun stopAutoRefresh() {
         autoRefreshJob?.cancel()
         autoRefreshJob = null
+    }
+
+    /** A connection died - explicitly or silently, see [MiProtocol.connectionLost] - while the app
+     * still thought it was live. Tears down like a normal [disconnect] and returns to the device
+     * list, but leaves a reason on that device's tile (red, like a failed connect attempt)
+     * afterwards instead of disconnect()'s usual clean slate: the user did nothing here and should
+     * see why they're suddenly back at the list instead of wondering if they misclicked. */
+    private fun connectionDied(mac: String, message: String) {
+        disconnect()
+        _state.update { it.copy(connectFailedMac = mac, connectFailedError = message) }
     }
 
     /** Cleanly closes the BLE connection and returns to the login screen - lets the user end the

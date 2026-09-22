@@ -9,6 +9,7 @@ import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothProfile
 import android.content.Context
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.withTimeoutOrNull
@@ -29,6 +30,21 @@ class ScooterBleManager(private val context: Context) {
     private val notifications = MutableSharedFlow<CharacteristicUpdate>(extraBufferCapacity = 64)
     val notificationFlow: SharedFlow<CharacteristicUpdate> = notifications
 
+    // Some BLE stacks (confirmed live on MIUI) silently drop an established connection without
+    // ever firing onConnectionStateChange(DISCONNECTED) - the app then has no other way to notice
+    // than a GATT operation suddenly failing to even start. That used to be invisible: callers just
+    // kept retrying the same doomed request forever (each one burning its full timeout), the UI sat
+    // on the last values it ever successfully read, and the user had no way to tell the connection
+    // was dead versus just slow. A real, explicit disconnect (see onConnectionStateChange below) is
+    // unambiguous and emits immediately; an immediate "did not even start" write failure is not -
+    // it can also be a one-off GATT-busy hiccup - so that path only counts after
+    // [HARD_FAILURE_THRESHOLD] CONSECUTIVE such failures (any successful write resets the count),
+    // and even each individual failure gets one quick retry first. Callers only need to watch this
+    // one flow either way.
+    private val _connectionLost = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val connectionLost: SharedFlow<Unit> = _connectionLost
+    private var consecutiveHardFailures = 0
+
     private var connectDeferred: CompletableDeferred<Boolean>? = null
     private var servicesDeferred: CompletableDeferred<Boolean>? = null
     private var writeDeferred: CompletableDeferred<Boolean>? = null
@@ -41,7 +57,13 @@ class ScooterBleManager(private val context: Context) {
             android.util.Log.d(TAG, "onConnectionStateChange status=$status newState=$newState")
             when (newState) {
                 BluetoothProfile.STATE_CONNECTED -> connectDeferred?.complete(true)
-                BluetoothProfile.STATE_DISCONNECTED -> connectDeferred?.complete(false)
+                BluetoothProfile.STATE_DISCONNECTED -> {
+                    connectDeferred?.complete(false)
+                    // Only while gatt is still set: during connect() itself (before gatt is ever
+                    // considered "up" for callers) or after our own disconnect() already cleared
+                    // it, this transition is expected and not a connection loss to report.
+                    if (gatt != null) _connectionLost.tryEmit(Unit)
+                }
             }
         }
 
@@ -124,6 +146,11 @@ class ScooterBleManager(private val context: Context) {
 
     private companion object {
         const val TAG = "ScooterBle"
+
+        // A single immediate write failure is ambiguous (see connectionLost's doc comment) - this
+        // many IN A ROW, each having already had its own quick retry, is not: every property in a
+        // sweep failing the same way is what a truly dead link looks like, not a one-off hiccup.
+        const val HARD_FAILURE_THRESHOLD = 3
     }
 
     /** Negotiates a larger ATT MTU (device reports 247 in the reference dump; the default
@@ -210,11 +237,27 @@ class ScooterBleManager(private val context: Context) {
         @Suppress("DEPRECATION")
         characteristic.value = data
         @Suppress("DEPRECATION")
-        val started = g.writeCharacteristic(characteristic)
+        var started = g.writeCharacteristic(characteristic)
         if (!started) {
-            android.util.Log.e(TAG, "writeCharacteristic() returned false (did not even start)")
+            // Often just the GATT stack still busy with the previous operation for a moment
+            // (despite our own request mutex serializing calls, the OS/HAL layer can still show
+            // this) - one short, quiet retry clears most of these without ever being visible as a
+            // failure at all.
+            delay(150)
+            @Suppress("DEPRECATION")
+            started = g.writeCharacteristic(characteristic)
+        }
+        if (!started) {
+            consecutiveHardFailures++
+            android.util.Log.e(TAG, "writeCharacteristic() returned false (did not even start), $consecutiveHardFailures in a row")
+            // Only after several of these IN A ROW: a single one (even after its own retry above)
+            // can still be a one-off hiccup, but a characteristic that worked moments ago
+            // consistently refusing to even start a write is what a silently-dropped connection
+            // (see connectionLost's doc comment) looks like.
+            if (consecutiveHardFailures >= HARD_FAILURE_THRESHOLD) _connectionLost.tryEmit(Unit)
             return false
         }
+        consecutiveHardFailures = 0
         val ok = writeDeferred!!.await()
         android.util.Log.d(TAG, "write ${characteristic.uuid} completed ok=$ok")
         return ok

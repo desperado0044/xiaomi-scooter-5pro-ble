@@ -211,7 +211,11 @@ switching the scooter on even a second after tapping it still connects, instead 
 blind connection timeout that never notices. The device tile shows this live (green, "Looking for
 scooter …" → "Connecting …" → "Authenticating …") and turns red with the reason if it ultimately
 fails, cleanly separate from a manual disconnect (so returning to the list after cleanly
-disconnecting never falsely shows a failure).
+disconnecting never falsely shows a failure). Some Android BLE stacks can drop a connection
+without ever reporting it (confirmed live: the app kept silently re-trying forever, sitting on the
+last values it had ever read) - a failed request is now treated as a lost connection right away
+instead of waiting out its full timeout, and the app returns to the device list with a clear reason
+instead of quietly showing stale data.
 
 ## Getting started
 
