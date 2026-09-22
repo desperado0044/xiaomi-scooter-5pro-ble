@@ -43,6 +43,11 @@ import androidx.compose.ui.unit.dp
 import com.scooterre.client.protocol.KnownDevice
 import com.scooterre.client.viewmodel.UiState
 
+/** Material3 has no built-in "success" role - a plain, theme-independent green reads clearly as
+ * "in progress, going well" against both light and dark surfaces, unlike e.g. primaryContainer
+ * which can already mean something else in a custom theme. */
+private val ConnectingGreen = androidx.compose.ui.graphics.Color(0xFF2E7D32)
+
 /** Lets the user choose which previously-connected scooter to reconnect to - the app now keeps
  * every device it has ever logged into (see [com.scooterre.client.protocol.DeviceRegistry])
  * rather than a single swappable slot, so this screen shows all of them side by side. */
@@ -99,8 +104,26 @@ fun DevicePickerScreen(
                 modifier = Modifier.padding(top = 16.dp, bottom = 16.dp).weight(1f, fill = false),
             ) {
                 items(state.knownDevices, key = { it.mac }) { device ->
+                    // Dedicated fields (not the shared busy/error state) - see their doc comment in
+                    // UiState: a stray unrelated background failure landing in `error` right as this
+                    // device's macAddress happened to still match it produced a misleading red tile.
+                    val connecting = state.connectingMac?.equals(device.mac, ignoreCase = true) == true
+                    val failed = state.connectFailedMac?.equals(device.mac, ignoreCase = true) == true
+                    val colors = when {
+                        connecting -> androidx.compose.material3.CardDefaults.cardColors(
+                            containerColor = ConnectingGreen, contentColor = androidx.compose.ui.graphics.Color.White,
+                        )
+                        failed -> androidx.compose.material3.CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        else -> androidx.compose.material3.CardDefaults.cardColors()
+                    }
                     Card(
-                        modifier = Modifier.fillMaxWidth().clickable { onSelectDevice(device) },
+                        colors = colors,
+                        // While any connect attempt is running, other tiles can't be tapped too -
+                        // there's only one BLE connection/protocol instance at a time.
+                        modifier = Modifier.fillMaxWidth().clickable(enabled = !state.busy) { onSelectDevice(device) },
                     ) {
                         Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
                             Row(
@@ -114,19 +137,31 @@ fun DevicePickerScreen(
                                         style = MaterialTheme.typography.bodyLarge,
                                     )
                                     Text(
-                                        device.mac,
+                                        when {
+                                            // The live stage text ("Suche Scooter ...", "Versuch 2
+                                            // ...", "Authentifiziere ...") - falls back to the
+                                            // static label only in the unlikely case busyMessage
+                                            // hasn't been set yet for this tick.
+                                            connecting -> state.busyMessage.ifBlank { s.tileConnectingText }
+                                            failed -> state.connectFailedError?.let { "${s.tileConnectFailedText}: $it" } ?: s.tileConnectFailedText
+                                            else -> device.mac
+                                        },
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        color = if (connecting || failed) androidx.compose.ui.graphics.Color.Unspecified else MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
-                                TextButton(onClick = { onOpenDocuments(device.mac) }) {
-                                    Text("\uD83D\uDCC4 ${state.documentCounts[device.mac] ?: 0}")
+                                if (!connecting) {
+                                    TextButton(onClick = { onOpenDocuments(device.mac) }) {
+                                        Text("\uD83D\uDCC4 ${state.documentCounts[device.mac] ?: 0}")
+                                    }
                                 }
                             }
-                            Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                                TextButton(onClick = { renaming = device }) { Text(s.renameDeviceButton) }
-                                TextButton(onClick = { onExportDevice(device) }) { Text(s.exportDeviceButton) }
-                                TextButton(onClick = { pendingForget = device }) { Text(s.forgetDeviceButton) }
+                            if (!connecting) {
+                                Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                                    TextButton(onClick = { renaming = device }) { Text(s.renameDeviceButton) }
+                                    TextButton(onClick = { onExportDevice(device) }) { Text(s.exportDeviceButton) }
+                                    TextButton(onClick = { pendingForget = device }) { Text(s.forgetDeviceButton) }
+                                }
                             }
                         }
                     }
@@ -138,6 +173,8 @@ fun DevicePickerScreen(
             Text(s.addAnotherDeviceButton)
         }
 
+        // A failed connect attempt shows on its own tile above (red, connectFailedMac/-Error) -
+        // this generic banner is for anything else that sets the shared `error` field.
         state.error?.let {
             Text(
                 "${s.errorPrefix}$it",

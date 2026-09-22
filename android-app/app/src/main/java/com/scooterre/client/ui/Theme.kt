@@ -55,3 +55,8 @@ fun ScooterTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composabl
 
 /** SYSTEM follows the phone's dark-mode setting; LIGHT/DARK force one look. */
 enum class ThemeMode { SYSTEM, LIGHT, DARK }
+
+/** AUTO leaves rotation to Android as usual (so the phone's own rotation lock still applies);
+ * PORTRAIT/LANDSCAPE pin the app to one orientation regardless of how the phone is held or
+ * whether its rotation lock is on. Applies to the whole app (one Activity), not per screen. */
+enum class OrientationMode { AUTO, PORTRAIT, LANDSCAPE }

@@ -9,45 +9,27 @@ import org.junit.Test
 
 class RangeEstimateTest {
     @Test
-    fun energyLeftIsChargeTimesVoltage() {
-        assertEquals(240.0, RangeEstimate.remainingWh(6000, 40.0), 0.001)
+    fun rangeIsRemainingPercentDividedByConsumption() {
+        val stats = RideWindow.Stats(km = 100.0, percentUsed = 50.0) // 0.5 %/km
+        assertEquals(120.0, RangeEstimate.rangeKm(remainingPercent = 60.0, stats)!!, 0.001)
     }
 
     @Test
-    fun rangeIsEnergyLeftDividedByConsumption() {
-        val totals = ModeEfficiencyTotals(totalKm = 100.0, totalWh = 2000.0) // 20 Wh/km
-        assertEquals(12.0, RangeEstimate.rangeKm(240.0, totals)!!, 0.001)
-    }
-
-    @Test
-    fun tooLittleDataOrNoEnergyGivesNoEstimate() {
-        assertNull(RangeEstimate.rangeKm(240.0, null))
-        assertNull(RangeEstimate.rangeKm(240.0, ModeEfficiencyTotals(4.9, 100.0)))
-        assertNull(RangeEstimate.rangeKm(0.0, ModeEfficiencyTotals(50.0, 1000.0)))
-        assertNotNull(RangeEstimate.rangeKm(240.0, ModeEfficiencyTotals(5.0, 100.0)))
+    fun tooLittleDataOrZeroConsumptionGivesNoEstimate() {
+        assertNull(RangeEstimate.rangeKm(60.0, null))
+        assertNull(RangeEstimate.rangeKm(60.0, RideWindow.Stats(4.9, 5.0)))
+        assertNull(RangeEstimate.rangeKm(60.0, RideWindow.Stats(50.0, 0.0)))
+        assertNotNull(RangeEstimate.rangeKm(60.0, RideWindow.Stats(5.0, 5.0)))
     }
 
     @Test
     fun ridesWithImplausibleConsumptionAreNotCounted() {
-        assertTrue(RangeEstimate.isPlausibleRide(10.0, 150.0))   // 15 Wh/km
-        assertFalse(RangeEstimate.isPlausibleRide(13.9, 37.0))   // 2.7 Wh/km: charged in between
-        assertFalse(RangeEstimate.isPlausibleRide(1.0, 200.0))   // 200 Wh/km
+        assertTrue(RangeEstimate.isPlausibleRide(10.0, 15.0))   // 1.5 %/km
+        assertFalse(RangeEstimate.isPlausibleRide(13.9, 1.0))   // 0.07 %/km: charged in between
+        assertFalse(RangeEstimate.isPlausibleRide(1.0, 40.0))   // 40 %/km
         assertFalse(RangeEstimate.isPlausibleRide(0.0, 10.0))
+        assertFalse(RangeEstimate.isPlausibleRide(10.0, 0.0))
     }
 
-    @Test
-    fun recentRidesCountMoreThanOldOnes() {
-        // 300 km at 20 Wh/km, then 150 km at 30 Wh/km: lifetime lands at 23.3, the recent value closer to 30
-        val after = ModeEfficiencyTotals(300.0, 6000.0).withRide(150.0, 4500.0)
-        assertEquals(450.0, after.totalKm, 0.001)
-        assertEquals(10500.0 / 450.0, after.whPerKm, 0.001)
-        assertTrue(after.recentWhPerKm > after.whPerKm)
-        assertEquals(300.0 * 0.5 + 150.0, after.recentKm, 0.001)
-    }
-
-    @Test
-    fun oldDataWithoutRecentTotalsStartsEqualToTheLifetimeTotals() {
-        val old = ModeEfficiencyTotals(80.0, 1600.0)
-        assertEquals(old.whPerKm, old.recentWhPerKm, 0.0001)
-    }
+    private fun assertTrue(condition: Boolean) = org.junit.Assert.assertTrue(condition)
 }

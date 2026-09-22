@@ -110,9 +110,7 @@ no promise of support or of a schedule — this is a hobby project.
   sensitive functions (cruise control, tail light).
 - **Live values**: automatic refresh; about every 2.5 s while riding (the ride-relevant values),
   adjustable while parked (economy/normal/fast).
-- **Ride log** (the scooter's most recent rides) can be exported as a file; **consumption
-  history** (distance and Wh/km per riding mode, experimental): after connecting, the app asks
-  which mode you mostly rode in.
+- **Ride log** (the scooter's most recent rides) can be exported as a file.
 - **Tire maintenance**: reminder on/off and interval (14–180 days) settable.
 - **Home-screen widget** with the last known status (battery, lock, range).
 
@@ -180,12 +178,17 @@ no promise of support or of a schedule — this is a hobby project.
   confirm. Nothing is ever installed silently. (Google Play Protect may offer to scan a new version once.)
 - **Find scooter**: makes the scooter beep and flash. It needs a switched-on scooter within Bluetooth range.
 - **Range at your own consumption (live ride log)**: while your phone is connected to the scooter during a ride
-  and the app stays open ("Keep screen on" helps), the app records distance and energy per riding mode — without
-  any questions. Once a mode has 5 km recorded, the overview shows the range at *your* Wh/km in the current mode
-  (newer rides count more, so an ageing battery shows up), next to the scooter's own estimate. **Rides without
-  a connection are not recorded**; if you do not connect during rides, you get only the scooter's own (firmware)
-  estimate. A switch in the app settings ("Own consumption analysis") turns this off: nothing is recorded and only the
-  scooter's own values are used. The Verlauf (history) tab also keeps a daily battery health log (health, cycles, odometer).
+  and the app stays open ("Keep screen on" helps), the app records distance and battery percentage used per riding
+  mode — without any questions, and without needing the battery's rated capacity or its voltage (which sags under
+  load): the percentage the scooter already reports is enough, since the range estimate only ever divides the
+  *current* percentage by it. Once a mode has 5 km recorded within the last 300 km (older rides roll out of that
+  window, so an ageing battery or worn tyres show up on their own instead of being averaged in forever), the
+  overview's headline range card shows this instead of the scooter's own estimate, with the scooter's own value
+  named underneath for comparison. **Rides without a connection are not recorded**; if you do not connect during
+  rides, you only ever see the scooter's own (firmware) estimate. The switch in the app settings ("Own consumption
+  analysis", on by default) decides which of the two is the prominent one: on picks your own once there is enough
+  data, off always shows the scooter's estimate and records nothing. The Verlauf (history) tab lists it per mode
+  and also keeps a daily battery health log (health, cycles, odometer).
 - **Copy diagnostics**: one button in the app settings copies app, phone and scooter model, settings and the latest
   error messages (no MAC address, keys or documents) for a bug report.
 - **Send documents**: one tap sends a scooter's documents (without the key) to family members. On their phone the
@@ -199,8 +202,13 @@ no promise of support or of a schedule — this is a hobby project.
   <em>App settings (German left, English right)</em>
 </p>
 
-**Under the hood**: persistent BLE session (no reconnect per request) with automatic retry on
-transient connection issues.
+**Under the hood**: persistent BLE session (no reconnect per request). Connecting first waits for
+an actual advertisement from the saved scooter before attempting the BLE connection itself — so
+switching the scooter on even a second after tapping it still connects, instead of running into a
+blind connection timeout that never notices. The device tile shows this live (green, "Looking for
+scooter …" → "Connecting …" → "Authenticating …") and turns red with the reason if it ultimately
+fails, cleanly separate from a manual disconnect (so returning to the list after cleanly
+disconnecting never falsely shows a failure).
 
 ## Getting started
 

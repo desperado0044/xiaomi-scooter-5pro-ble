@@ -29,6 +29,11 @@ internal class SettingsController(
         _state.update { it.copy(themeMode = mode) }
     }
 
+    fun setOrientationMode(mode: OrientationMode) {
+        prefs.edit().putString(KEY_ORIENTATION_MODE, mode.name).apply()
+        _state.update { it.copy(orientationMode = mode) }
+    }
+
     fun setAutoBrightness(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_AUTO_BRIGHTNESS, enabled).apply()
         _state.update { it.copy(autoBrightness = enabled) }
@@ -86,6 +91,7 @@ internal class SettingsController(
             it.copy(
                 language = resolveLang(prefs.getString(KEY_LANG, null)),
                 themeMode = runCatching { ThemeMode.valueOf(prefs.getString(KEY_THEME_MODE, null) ?: "SYSTEM") }.getOrDefault(ThemeMode.SYSTEM),
+                orientationMode = runCatching { OrientationMode.valueOf(prefs.getString(KEY_ORIENTATION_MODE, null) ?: "AUTO") }.getOrDefault(OrientationMode.AUTO),
                 keepScreenOn = prefs.getBoolean(KEY_KEEP_SCREEN_ON, true),
                 autoBrightness = prefs.getBoolean(KEY_AUTO_BRIGHTNESS, false),
                 units = runCatching { UnitSystem.valueOf(prefs.getString(KEY_UNITS, null) ?: "METRIC") }.getOrDefault(UnitSystem.METRIC),

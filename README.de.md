@@ -117,9 +117,7 @@ ist ein Hobbyprojekt.
   setzbar, mit Sicherheits-/Rechtshinweis bei regional heiklen Funktionen (Tempomat, Rücklicht).
 - **Live-Werte**: automatische Aktualisierung; während der Fahrt etwa alle 2,5 s (die
   fahrrelevanten Werte), im Stand einstellbar (sparsam/normal/schnell).
-- **Fahrtenbuch** (die letzten Fahrten des Scooters) als Datei exportierbar; **Verbrauchs-Verlauf**
-  (gefahrene km und Wh/km je Fahrmodus, experimentell): nach dem Verbinden fragt die App, in
-  welchem Modus zuletzt gefahren wurde.
+- **Fahrtenbuch** (die letzten Fahrten des Scooters) als Datei exportierbar.
 - **Reifenwartung**: Erinnerung ein/aus und Intervall (14–180 Tage) einstellbar.
 - **Homescreen-Widget** mit dem letzten Stand (Akku, Sperre, Reichweite).
 
@@ -190,13 +188,18 @@ ist ein Hobbyprojekt.
   bestätigst. Es wird nie etwas still installiert. (Google Play Protect bietet bei einer neuen Version einmal einen Scan an.)
 - **Scooter suchen**: lässt den Scooter piepen und blinken. Er muss dafür eingeschaltet und in Bluetooth-Reichweite sein.
 - **Reichweite nach eigenem Verbrauch (Live-Fahrtenlog)**: Solange dein Handy während der Fahrt mit dem Scooter
-  verbunden ist und die App offen bleibt („Bildschirm anlassen" hilft), zeichnet die App Strecke und Energie je
-  Fahrmodus auf — ohne Rückfragen. Sobald ein Modus 5 km hat, zeigt die Übersicht die Reichweite mit *deinem* Wh/km im
-  aktuellen Modus (neuere Fahrten zählen mehr, so fällt ein alternder Akku auf) neben der Schätzung des Scooters.
-  **Fahrten ohne Verbindung werden nicht aufgezeichnet**; wer das Handy nicht während der Fahrt verbindet, bekommt nur
-  die Schätzung des Scooters (Firmware). Ein Schalter in den App-Einstellungen („Eigene Verbrauchsanalyse") schaltet das ab:
-  Es wird nichts aufgezeichnet, und nur die Werte des Scooters gelten. Der Tab „Verlauf" führt außerdem ein tägliches Akku-Gesundheits-Log
-  (Gesundheit, Zyklen, Kilometerstand).
+  verbunden ist und die App offen bleibt („Bildschirm anlassen" hilft), zeichnet die App Strecke und verbrauchte
+  Akku-Prozent je Fahrmodus auf — ohne Rückfragen und ohne die Nennkapazität oder die Spannung des Akkus zu
+  brauchen (die unter Last schwankt): Der Prozentwert, den der Scooter ohnehin meldet, reicht, weil die
+  Reichweitenschätzung immer nur den aktuellen Prozentwert dadurch teilt. Sobald ein Modus 5 km aus den letzten
+  300 km hat (ältere Fahrten fallen aus diesem Fenster heraus, so fällt ein alternder Akku oder abgefahrene Reifen
+  von selbst auf, statt für immer mit hineinzurechnen), zeigt die große Reichweiten-Kachel der Übersicht diesen
+  Wert statt der Scooter-Schätzung, mit der Scooter-Schätzung klein zum Vergleich darunter. **Fahrten ohne
+  Verbindung werden nicht aufgezeichnet**; wer das Handy nicht während der Fahrt verbindet, sieht immer nur die
+  Schätzung des Scooters (Firmware). Der Schalter in den App-Einstellungen („Eigene Verbrauchsanalyse", standardmäßig
+  an) entscheidet, welcher der beiden Werte groß angezeigt wird: an wählt den eigenen, sobald genug Daten da sind,
+  aus zeigt immer die Scooter-Schätzung und zeichnet nichts auf. Der Tab „Verlauf" listet ihn je Modus auf und
+  führt außerdem ein tägliches Akku-Gesundheits-Log (Gesundheit, Zyklen, Kilometerstand).
 - **Diagnose kopieren**: Ein Knopf in den App-Einstellungen kopiert App-, Handy- und Scooter-Modell, Einstellungen und die
   letzten Fehlermeldungen (ohne MAC-Adresse, Schlüssel und Dokumente) für eine Fehlermeldung.
 - **Dokumente senden**: Ein Tipp schickt die Dokumente eines Scooters (ohne Schlüssel) an Familienmitglieder. Dort
@@ -210,8 +213,13 @@ ist ein Hobbyprojekt.
   <em>App-Einstellungen (links deutsch, rechts englisch)</em>
 </p>
 
-**Technik**: persistente BLE-Sitzung (keine Neuverbindung pro Abfrage) mit automatischem
-Wiederholungsversuch bei kurzzeitigen Verbindungsproblemen.
+**Technik**: persistente BLE-Sitzung (keine Neuverbindung pro Abfrage). Beim Verbinden wird zuerst
+auf eine echte Funk-Ankündigung (Advertisement) des gespeicherten Scooters gewartet, bevor der
+eigentliche BLE-Connect versucht wird – so verbindet es auch, wenn der Scooter erst eine Sekunde
+nach dem Antippen eingeschaltet wird, statt in ein blindes Timeout zu laufen, das das nie
+mitbekommt. Die Geräte-Kachel zeigt das live an (grün, „Suche Scooter …" → „Verbinde …" →
+„Authentifiziere …") und wird bei einem endgültigen Fehlschlag rot mit dem Grund – unabhängig von
+einem sauberen manuellen Trennen (danach zeigt die Liste nie fälschlich eine rote Kachel).
 
 ## Erste Schritte
 

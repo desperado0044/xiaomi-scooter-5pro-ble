@@ -4,6 +4,7 @@ import android.app.Application
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.net.Uri
+import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.scooterre.client.ble.FoundDevice
@@ -23,7 +24,7 @@ import com.scooterre.client.protocol.DocumentStore
 import com.scooterre.client.protocol.KnownDevice
 import com.scooterre.client.protocol.MiProtocol
 import com.scooterre.client.protocol.ModelSupport
-import com.scooterre.client.protocol.ModeEfficiencyTotals
+import com.scooterre.client.protocol.RideWindow
 import com.scooterre.client.protocol.LiveRideTracker
 import com.scooterre.client.protocol.PropertyExplorer
 import com.scooterre.client.protocol.ProtocolException
@@ -44,6 +45,7 @@ import com.scooterre.client.reminder.InsuranceSchedule
 import com.scooterre.client.ui.Lang
 import com.scooterre.client.ui.resolveLang
 import com.scooterre.client.ui.ThemeMode
+import com.scooterre.client.ui.OrientationMode
 import com.scooterre.client.ui.UnitSystem
 import com.scooterre.client.ui.distance
 import com.scooterre.client.ui.distanceUnit
@@ -56,12 +58,17 @@ import com.scooterre.client.ui.modelDisplayName
 import com.scooterre.client.ui.propertyName
 import com.scooterre.client.ui.strings
 import com.scooterre.client.widget.ScooterWidgetUpdater
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -72,6 +79,13 @@ import kotlinx.coroutines.withTimeoutOrNull
 // build meant for anyone's own scooter, not just the one it was originally developed against.
 const val DEFAULT_SCOOTER_MAC = ""
 
+/** Total time [ScooterViewModel.connectAndLogin] keeps trying (scanning for the scooter's
+ * advertisement, then connecting) before giving up - not a fixed attempt count, since most of it
+ * is normally spent simply waiting for the scooter to be switched on/in range, which can take any
+ * amount of time within reason. Long enough to comfortably cover fumbling for the power button,
+ * short enough that a picker tile doesn't sit "Verbinde ..." forever if it's genuinely out of reach. */
+private const val CONNECT_BUDGET_MS = 25_000L
+
 /** Polled every ~2.5s (see [ScooterViewModel.startAutoRefresh]) while actually riding, instead of
  * the full ~50-property table - small enough that one pass stays well inside that window even
  * without batching, and covers exactly what changes meaningfully second-to-second on a moving
@@ -79,8 +93,9 @@ const val DEFAULT_SCOOTER_MAC = ""
  * slower full-sweep cadence). */
 private val RIDE_PRIORITY_PROPERTIES = setOf(
     "IS_RIDING", "AVERAGE_SPEED", "CURRENT_MILEAGE", "BATTERY_LEVEL", "REMAINING_MILEAGE", "RIDING_TIME", "RIDING_MODE",
-    // for the live ride log (see LiveRideTracker): odometer, remaining charge and voltage
-    "TOTAL_MILEAGE", "REMAINING_BATTERY", "VOLTAGE",
+    // for the live ride log (see LiveRideTracker): the odometer - BATTERY_LEVEL above doubles as
+    // the ride's cost, no separate mAh/voltage reads needed for it (see RideWindow's doc comment)
+    "TOTAL_MILEAGE",
 )
 
 /** Pause between full property sweeps while parked (a sweep itself takes ~9s on top). */
@@ -100,6 +115,14 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     private val batteryHistoryStore = BatteryHistoryStore(application)
     private val documentStore = DocumentStore(application)
     private var protocol: MiProtocol? = null
+    // Every property read/write/explore that depends on the current BLE connection launches into
+    // this scope instead of viewModelScope directly - cancelled the instant disconnect() runs, so
+    // an in-flight one is interrupted cleanly (CancellationException) instead of racing the GATT
+    // teardown (ScooterBleManager.disconnect() nulls its `gatt` synchronously) and surfacing as a
+    // scary, generic "Characteristic ... not found" error - confirmed by the user, 2026-09-22, both
+    // right after a fresh connect (refreshAll's own initial sweep still running) and on manual
+    // disconnect while something else was mid-request. Recreated fresh on every successful connect.
+    private var connectionScope: CoroutineScope? = null
 
     // Kept around across the "PIN required" round-trip so retryWithPin() doesn't have to repeat
     // the whole cloud login (password or QR) just because the device also needs its sharing PIN.
@@ -118,6 +141,8 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
                 language = resolveLang(prefs.getString(KEY_LANG, null)),
                 themeMode = runCatching { ThemeMode.valueOf(prefs.getString(KEY_THEME_MODE, null) ?: "SYSTEM") }
                     .getOrDefault(ThemeMode.SYSTEM),
+                orientationMode = runCatching { OrientationMode.valueOf(prefs.getString(KEY_ORIENTATION_MODE, null) ?: "AUTO") }
+                    .getOrDefault(OrientationMode.AUTO),
                 keepScreenOn = prefs.getBoolean(KEY_KEEP_SCREEN_ON, true),
                 autoBrightness = prefs.getBoolean(KEY_AUTO_BRIGHTNESS, false),
                 units = runCatching { UnitSystem.valueOf(prefs.getString(KEY_UNITS, null) ?: "METRIC") }.getOrDefault(UnitSystem.METRIC),
@@ -161,6 +186,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     fun importDocumentsBundle(uri: Uri) = documents.importDocumentsBundle(uri)
 
     fun setThemeMode(mode: ThemeMode) = settings.setThemeMode(mode)
+    fun setOrientationMode(mode: OrientationMode) = settings.setOrientationMode(mode)
     fun setAutoBrightness(enabled: Boolean) = settings.setAutoBrightness(enabled)
     fun setLanguage(lang: Lang) = settings.setLanguage(lang)
     fun setUnits(units: UnitSystem) = settings.setUnits(units)
@@ -280,11 +306,28 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    /** Connects to an already-known scooter using its saved key - the picker's tap-to-connect. */
-    fun connectKnownDevice(device: KnownDevice) = launchBusy(s.connectingSavedBusy) {
-        val ltmk = secureStore.loadLtmk(device.mac) ?: throw CloudException(s.noSavedKeyError(device.mac))
-        _state.update { it.copy(macAddress = device.mac, deviceName = device.name, activeModel = device.model) }
-        connectAndLogin(device.mac, ltmk)
+    /** Connects to an already-known scooter using its saved key - the picker's tap-to-connect. Its
+     * own try/catch rather than the generic [launchBusy] - a failure updates [UiState.connectFailedMac]/
+     * [UiState.connectFailedError] instead of the shared [UiState.error], which is also written by
+     * unrelated background calls (see the field's own doc comment) and produced an intermittent,
+     * misleading red tile even after a clean manual disconnect (confirmed by the user, 2026-09-22:
+     * "manchmal, nicht immer"). */
+    fun connectKnownDevice(device: KnownDevice) {
+        viewModelScope.launch {
+            _state.update {
+                it.copy(busy = true, busyMessage = s.connectingSavedBusy, connectingMac = device.mac, connectFailedMac = null, connectFailedError = null)
+            }
+            try {
+                val ltmk = secureStore.loadLtmk(device.mac) ?: throw CloudException(s.noSavedKeyError(device.mac))
+                _state.update { it.copy(macAddress = device.mac, deviceName = device.name, activeModel = device.model) }
+                connectAndLogin(device.mac, ltmk)
+            } catch (e: Exception) {
+                android.util.Log.e("ScooterVM", "connectKnownDevice failed", e)
+                _state.update { it.copy(connectFailedMac = device.mac, connectFailedError = e.message ?: e.toString()) }
+            } finally {
+                _state.update { it.copy(busy = false, busyMessage = "", connectingMac = null) }
+            }
+        }
     }
 
     /** Removes a saved scooter's key and its entry in the device list - offered from the picker. */
@@ -491,26 +534,34 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
 
         val manager = getApplication<Application>().getSystemService(BluetoothManager::class.java)
         val device = manager.adapter.getRemoteDevice(mac)
+        val scanner = ScooterScanner(getApplication())
 
-        // The very first connect attempt right after a killed/restarted app process (or right
-        // after cleanly disconnecting and immediately reconnecting) routinely fails fast or times
-        // out - the OS Bluetooth stack needs a moment to release the previous GATT client
-        // registration. Silent retries with a growing pause paper over that instead of making the
-        // user notice and tap "Verbinden" again themselves; an immediate retry with no pause at
-        // all was observed to still fail right after a fresh disconnect.
+        // A direct connectGatt() (autoConnect=false, see ScooterBleManager) only succeeds against
+        // a device that is already advertising at the exact instant it's called - it does not
+        // itself keep listening for the scooter to show up a moment later. Confirmed live: turning
+        // the scooter on even one second after tapping "Verbinden" never connected without this.
+        // So every attempt below first waits for an actual advertisement from this MAC, then does
+        // the (normally fast, ~1-2s) direct connect - which also means a scooter that's simply off
+        // shows "Suche ..." instead of burning through blind GATT-timeout retries, and turning it
+        // on mid-wait is caught the moment the next advertisement arrives.
+        val deadline = SystemClock.elapsedRealtime() + CONNECT_BUDGET_MS
         var lastError: Exception? = null
-        for (attempt in 1..3) {
-            if (attempt > 1) {
-                updateBusyMessage(s.retryingBusy(attempt))
-                delay(1500L * (attempt - 1))
-            } else {
-                updateBusyMessage(s.connectingBluetoothBusy)
-            }
+        var attempt = 0
+        while (true) {
+            val remaining = deadline - SystemClock.elapsedRealtime()
+            if (remaining <= 0) break
+            attempt++
+            updateBusyMessage(if (attempt == 1) s.waitingForScooterBusy else s.retryingBusy(attempt))
+            val seen = withTimeoutOrNull(remaining) { scanner.watchForDevice(mac).first() }
+            if (seen == null) break // budget ran out while the scooter never showed up
+
+            updateBusyMessage(s.connectingBluetoothBusy)
             val p = try {
                 MiProtocol.connect(getApplication(), device)
             } catch (e: Exception) {
                 Diagnostics.note("connect attempt $attempt failed: ${e.javaClass.simpleName}: ${e.message}")
                 lastError = e
+                delay(500)
                 continue
             }
             try {
@@ -520,12 +571,15 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
                 Diagnostics.note("login attempt $attempt failed: ${e.javaClass.simpleName}: ${e.message}")
                 p.dispose()
                 lastError = e
+                delay(500)
                 continue
             }
             Diagnostics.note("login ok (attempt $attempt)")
             protocol = p
             layoutChecked = false
             liveRide.reset()
+            connectionScope?.cancel()
+            connectionScope = CoroutineScope(viewModelScope.coroutineContext + SupervisorJob())
             if (support == ModelSupport.UNSUPPORTED) {
                 // Not this app's table: read only what the scooter offers, write nothing, then let go.
                 try {
@@ -549,7 +603,10 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
             startAutoRefresh()
             return
         }
-        throw lastError ?: ProtocolException("Connection failed")
+        // lastError is only set once a direct connect/login attempt actually ran and failed - if
+        // the scooter's advertisement was never seen at all within the budget, say so plainly
+        // instead of the more generic "Could not connect to device" from a GATT-level failure.
+        throw lastError ?: ProtocolException(s.scooterNotFoundError)
     }
 
     private var autoRefreshJob: Job? = null
@@ -575,7 +632,13 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         autoRefreshJob?.cancel()
         autoRefreshJob = viewModelScope.launch {
             while (true) {
-                val riding = (_state.value.values["IS_RIDING"]?.takeIf { it.ok }?.value as? Long) == 1L
+                // IS_RIDING is 0=Steht/Standing, 1=Übergang/Transitioning, 2=Fährt/Riding - "not
+                // standing" (not just the single value 2) so the fast cadence, and live tracking
+                // below, both start the moment the scooter leaves "Steht" instead of only for
+                // the brief transitional tick before it (a real bug until 2026-09-22: both this
+                // check and trackLiveRide's compared against exactly 1, so an entire real ride -
+                // state 2 throughout - read as "parked" and recorded nothing).
+                val riding = ((_state.value.values["IS_RIDING"]?.takeIf { it.ok }?.value as? Long) ?: 0L) != 0L
                 delay(if (riding) 2_500L else _state.value.refreshRate.idleDelayMs)
                 val spec = protocol?.requireSpecClient() ?: break
                 try {
@@ -610,6 +673,8 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
      * need its automatic retry. */
     fun disconnect() {
         stopAutoRefresh()
+        connectionScope?.cancel()
+        connectionScope = null
         liveRide.reset()
         protocol?.dispose()
         protocol = null
@@ -619,6 +684,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
             it.copy(
                 screen = if (known.isNotEmpty()) Screen.DEVICE_PICKER else Screen.LOGIN,
                 values = emptyMap(), error = null, knownDevices = known,
+                connectingMac = null, connectFailedMac = null, connectFailedError = null,
             )
         }
     }
@@ -633,7 +699,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         documents.refreshDocuments()
     }
 
-    fun refreshAll() = launchBusy(s.readingValuesBusy) {
+    fun refreshAll() = launchBusy(s.readingValuesBusy, connectionScope ?: viewModelScope) {
         val spec = protocol?.requireSpecClient() ?: return@launchBusy
         val profile = _state.value.activeSpecProfile
         for (property in profile.all) {
@@ -644,7 +710,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         checkLayout()
         trackLiveRide()
         recordBatteryLog()
-        _state.update { it.copy(efficiencyTotals = batteryHistoryStore.totals(it.macAddress), batteryLog = batteryHistoryStore.dailyLog(it.macAddress)) }
+        _state.update { it.copy(modeStats = batteryHistoryStore.windowStats(it.macAddress), batteryLog = batteryHistoryStore.dailyLog(it.macAddress)) }
         pushWidgetUpdate()
     }
 
@@ -676,25 +742,23 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     private val liveRide = LiveRideTracker()
 
     /** The live ride log (see [LiveRideTracker]): called with every fresh set of readings while connected. While the
-     * scooter is ridden, distance and energy are added to the totals of the riding mode that was active - without
-     * any question. Rides while the phone is not connected are not recorded. */
+     * scooter is ridden, distance and battery percentage are added to the window ([RideWindow]) of the riding mode
+     * that was active - without any question. Rides while the phone is not connected are not recorded. */
     private fun trackLiveRide() {
         val state = _state.value
         if (!state.rideTracking || state.activeSpecProfile.readOnly || state.layoutMismatch) return
         val values = state.values
         fun long(name: String): Long? = values[name]?.takeIf { it.ok }?.value as? Long
-        fun float(name: String): Double? = when (val v = values[name]?.takeIf { it.ok }?.value) {
-            is Float -> v.toDouble()
-            is Long -> v.toDouble()
-            else -> null
-        }
-        val km = float("TOTAL_MILEAGE")?.let { it * 0.01 } ?: return
-        val mah = long("REMAINING_BATTERY") ?: return
-        val voltage = float("VOLTAGE")?.let { it * 0.01 } ?: return
-        val segments = liveRide.onReading(LiveRideTracker.Reading(km, mah, voltage), riding = long("IS_RIDING") == 1L, currentMode = long("RIDING_MODE"))
+        val km = (values["TOTAL_MILEAGE"]?.takeIf { it.ok }?.value as? Float)?.let { it * 0.01 } ?: return
+        val batteryPercent = long("BATTERY_LEVEL") ?: return
+        // Same "not standing" fix as startAutoRefresh's own IS_RIDING check just above - see its comment.
+        val segments = liveRide.onReading(LiveRideTracker.Reading(km, batteryPercent), riding = (long("IS_RIDING") ?: 0L) != 0L, currentMode = long("RIDING_MODE"))
         if (segments.isEmpty()) return
-        segments.forEach { batteryHistoryStore.addRide(state.macAddress, it.mode, it.km, it.wh) }
-        _state.update { it.copy(efficiencyTotals = batteryHistoryStore.totals(it.macAddress)) }
+        segments.forEach {
+            Diagnostics.note("live ride segment: mode=${it.mode} km=%.2f pct=%.1f".format(it.km, it.percentUsed))
+            batteryHistoryStore.addSegment(state.macAddress, it.mode, it.km, it.percentUsed)
+        }
+        _state.update { it.copy(modeStats = batteryHistoryStore.windowStats(it.macAddress)) }
     }
 
     private var layoutChecked = false
@@ -734,16 +798,16 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     fun resetEfficiencyHistory() {
         val mac = _state.value.macAddress
         batteryHistoryStore.clear(mac)
-        _state.update { it.copy(efficiencyTotals = batteryHistoryStore.totals(mac), batteryLog = batteryHistoryStore.dailyLog(mac)) }
+        _state.update { it.copy(modeStats = batteryHistoryStore.windowStats(mac), batteryLog = batteryHistoryStore.dailyLog(mac)) }
     }
 
-    fun refreshOne(property: SpecProperty) = launchBusy(null) {
+    fun refreshOne(property: SpecProperty) = launchBusy(null, connectionScope ?: viewModelScope) {
         val spec = protocol?.requireSpecClient() ?: return@launchBusy
         val result = withContext(Dispatchers.IO) { spec.get(property) }
         _state.update { it.copy(values = it.values + (property.name to result)) }
     }
 
-    fun setBoolProperty(property: SpecProperty, value: Boolean) = launchBusy(null) {
+    fun setBoolProperty(property: SpecProperty, value: Boolean) = launchBusy(null, connectionScope ?: viewModelScope) {
         if (writesBlocked()) throw ProtocolException(s.writesBlockedError)
         val spec = protocol?.requireSpecClient() ?: return@launchBusy
         val status = withContext(Dispatchers.IO) { spec.set(property, encodeValue(SpecType.BOOL, if (value) 1L else 0L)) }
@@ -758,7 +822,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         if (status != 0) throw ProtocolException(s.setRejectedError(propertyName(property.name, _state.value.language), status))
     }
 
-    fun setNumericProperty(property: SpecProperty, value: Long) = launchBusy(null) {
+    fun setNumericProperty(property: SpecProperty, value: Long) = launchBusy(null, connectionScope ?: viewModelScope) {
         if (writesBlocked()) throw ProtocolException(s.writesBlockedError)
         val spec = protocol?.requireSpecClient() ?: return@launchBusy
         val status = withContext(Dispatchers.IO) { spec.set(property, encodeValue(property.type, value)) }
@@ -769,7 +833,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     /** For STRING-type settable properties (currently just TIRE_MAINTENANCE's packed
      * state+interval+remaining-days string) - [encodeValue] deliberately has no STRING overload
      * (see its own doc comment), so this writes the raw ASCII bytes directly instead. */
-    fun setStringProperty(property: SpecProperty, value: String) = launchBusy(null) {
+    fun setStringProperty(property: SpecProperty, value: String) = launchBusy(null, connectionScope ?: viewModelScope) {
         if (writesBlocked()) throw ProtocolException(s.writesBlockedError)
         val spec = protocol?.requireSpecClient() ?: return@launchBusy
         val status = withContext(Dispatchers.IO) { spec.set(property, value.toByteArray(Charsets.US_ASCII)) }
@@ -787,7 +851,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /** Reads every property of the scooter (never writes) and shows the result as a text to copy. */
-    fun exploreValues() = launchBusy(s.exploringBusy) {
+    fun exploreValues() = launchBusy(s.exploringBusy, connectionScope ?: viewModelScope) {
         val spec = protocol?.requireSpecClient() ?: return@launchBusy
         runExplorer(spec)
     }
@@ -803,11 +867,16 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
 
     fun dismissError() = _state.update { it.copy(error = null, needsPin = false) }
 
-    private fun launchBusy(message: String?, block: suspend () -> Unit) {
-        viewModelScope.launch {
+    private fun launchBusy(message: String?, scope: CoroutineScope = viewModelScope, block: suspend () -> Unit) {
+        scope.launch {
             _state.update { it.copy(busy = true, busyMessage = message ?: it.busyMessage, error = null) }
             try {
                 block()
+            } catch (e: CancellationException) {
+                // Never surface a cancellation (disconnect() tearing down connectionScope while
+                // this was mid-request) as a user-facing error - and must be rethrown, not
+                // swallowed, so the coroutine machinery actually finishes cancelling.
+                throw e
             } catch (e: Exception) {
                 android.util.Log.e("ScooterVM", "launchBusy failed", e)
                 _state.update { it.copy(error = e.message ?: e.toString()) }

@@ -4,6 +4,7 @@ package com.scooterre.client.viewmodel
 internal const val KEY_LAST_MAC = "last_mac"
 internal const val KEY_LANG = "lang"
 internal const val KEY_THEME_MODE = "theme_mode"
+internal const val KEY_ORIENTATION_MODE = "orientation_mode"
 internal const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
 internal const val KEY_AUTO_BRIGHTNESS = "auto_brightness"
 internal const val KEY_UNITS = "units"

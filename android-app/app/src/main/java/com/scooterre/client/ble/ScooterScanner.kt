@@ -3,7 +3,9 @@ package com.scooterre.client.ble
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
+import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
+import android.bluetooth.le.ScanSettings
 import android.content.Context
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -40,6 +42,39 @@ class ScooterScanner(private val context: Context) {
 
         try {
             scanner.startScan(callback)
+        } catch (e: Exception) {
+            close(e)
+            return@callbackFlow
+        }
+        awaitClose { runCatching { scanner.stopScan(callback) } }
+    }
+
+    /** Emits once a real over-the-air advertisement from exactly [mac] is seen. `connectGatt()`
+     * with `autoConnect=false` ("direct connect") only succeeds against a device that is already
+     * advertising at the very instant it's called - it does not itself keep listening for the
+     * device to show up a moment later. Waiting for an actual advertisement here first (confirmed
+     * live: switching the scooter on mid-attempt never connected without this) turns that into a
+     * connect that reacts the moment the scooter is switched on, instead of a blind GATT-timeout
+     * retry loop. Filtered by address (not name) - cheaper on the radio and matches even if a
+     * later firmware ever changes/drops the advertised name. */
+    @SuppressLint("MissingPermission")
+    fun watchForDevice(mac: String): Flow<Unit> = callbackFlow {
+        val manager = context.getSystemService(BluetoothManager::class.java)
+        val scanner = manager?.adapter?.bluetoothLeScanner
+        if (scanner == null) {
+            close()
+            return@callbackFlow
+        }
+
+        val callback = object : ScanCallback() {
+            override fun onScanResult(callbackType: Int, result: ScanResult) {
+                trySend(Unit)
+            }
+        }
+        val filter = ScanFilter.Builder().setDeviceAddress(mac).build()
+        val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
+        try {
+            scanner.startScan(listOf(filter), settings, callback)
         } catch (e: Exception) {
             close(e)
             return@callbackFlow

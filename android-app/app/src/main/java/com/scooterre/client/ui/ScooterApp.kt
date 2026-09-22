@@ -62,6 +62,19 @@ fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
             WindowCompat.getInsetsController(it, view).isAppearanceLightStatusBars = !dark
         }
     }
+    // AUTO leaves this alone (UNSPECIFIED - Android's normal behaviour, including the phone's own
+    // rotation lock); PORTRAIT/LANDSCAPE pin the whole app regardless of how it's held or whether
+    // rotation lock is on. One Activity for the whole app, so this is a single, app-wide setting,
+    // not something that can differ per screen.
+    SideEffect {
+        (view.context as? Activity)?.let { activity ->
+            activity.requestedOrientation = when (state.orientationMode) {
+                OrientationMode.AUTO -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                OrientationMode.PORTRAIT -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                OrientationMode.LANDSCAPE -> android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            }
+        }
+    }
     // The dashboard only exists while connected: keep the display on there. keepScreenOn only
     // holds while the window is visible, so the screen may still sleep once the app is in the
     // background.
@@ -90,6 +103,7 @@ fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
     val settingsActions = SettingsActions(
         onSetLanguage = viewModel::setLanguage,
         onSetThemeMode = viewModel::setThemeMode,
+        onSetOrientationMode = viewModel::setOrientationMode,
         onSetAutoBrightness = viewModel::setAutoBrightness,
         onSetKeepScreenOn = viewModel::setKeepScreenOn,
         onSetUnits = viewModel::setUnits,

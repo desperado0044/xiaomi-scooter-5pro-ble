@@ -13,7 +13,10 @@ private const val KM_PER_MILE = 1.609344
 fun UnitSystem.distance(km: Double): Double = if (this == UnitSystem.IMPERIAL) km / KM_PER_MILE else km
 fun UnitSystem.speed(kmh: Double): Double = distance(kmh)
 fun UnitSystem.temperature(celsius: Double): Double = if (this == UnitSystem.IMPERIAL) celsius * 9.0 / 5.0 + 32.0 else celsius
-fun UnitSystem.energyPerDistance(whPerKm: Double): Double = if (this == UnitSystem.IMPERIAL) whPerKm * KM_PER_MILE else whPerKm
+// A rate (something "per km", e.g. %/km) converts the other way round from a plain distance: a
+// mile is longer than a km, so the same consumption costs more per mile, not less - multiply
+// instead of divide.
+fun UnitSystem.ratePerDistance(perKm: Double): Double = if (this == UnitSystem.IMPERIAL) perKm * KM_PER_MILE else perKm
 
 val UnitSystem.distanceUnit: String get() = if (this == UnitSystem.IMPERIAL) "mi" else "km"
 val UnitSystem.speedUnit: String get() = if (this == UnitSystem.IMPERIAL) "mph" else "km/h"

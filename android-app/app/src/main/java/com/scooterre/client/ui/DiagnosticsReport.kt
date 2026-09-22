@@ -22,6 +22,7 @@ fun diagnosticsReport(context: Context, state: UiState): String {
             settings = listOf(
                 "language" to state.language.name,
                 "units" to state.units.name,
+                "orientation" to state.orientationMode.name,
                 "autoConnect" to state.autoConnect.toString(),
                 "refresh" to state.refreshRate.name,
                 "confirmCritical" to state.confirmCritical.toString(),

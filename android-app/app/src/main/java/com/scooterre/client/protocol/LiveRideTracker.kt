@@ -1,19 +1,21 @@
 package com.scooterre.client.protocol
 
 /**
- * The live ride log: while the phone is connected to the scooter during a ride, every reading of odometer, remaining
- * charge, voltage and riding mode passes through here, and the ride is cut into segments - one per riding mode, and
- * one per [SEGMENT_KM] so little is lost if the connection drops. A segment's distance is the odometer difference,
- * its energy the drop in remaining charge times the average voltage. Nothing is asked and nothing is stored here;
- * the caller adds the returned segments to the mode's totals ([BatteryHistoryStore.addRide]).
+ * The live ride log: while the phone is connected to the scooter during a ride, every reading of
+ * odometer, battery percentage and riding mode passes through here, and the ride is cut into
+ * segments - one per riding mode, and one per [SEGMENT_KM] so little is lost if the connection
+ * drops. A segment's distance is the odometer difference, its cost the drop in battery percentage -
+ * no mAh, no voltage, no capacity rating (see [RideWindow]'s doc comment for why percentage alone
+ * is enough here). Nothing is asked and nothing is stored here; the caller adds the returned
+ * segments to the ring buffer ([BatteryHistoryStore.addSegment]).
  *
  * Without a connection during the ride there is no live log - such rides are not recorded at all.
  */
 class LiveRideTracker {
-    data class Reading(val km: Double, val mah: Long, val voltage: Double)
+    data class Reading(val km: Double, val batteryPercent: Long)
 
     /** A finished piece of a ride in one riding [mode]. */
-    data class Segment(val mode: Long, val km: Double, val wh: Double)
+    data class Segment(val mode: Long, val km: Double, val percentUsed: Double)
 
     private var last: Reading? = null
     private var start: Reading? = null
@@ -60,8 +62,8 @@ class LiveRideTracker {
         val begin = start ?: return null
         val ridingMode = mode ?: return null
         val km = end.km - begin.km
-        val wh = (begin.mah - end.mah) / 1000.0 * ((begin.voltage + end.voltage) / 2.0)
-        return if (km >= MIN_SEGMENT_KM && RangeEstimate.isPlausibleRide(km, wh)) Segment(ridingMode, km, wh) else null
+        val percentUsed = (begin.batteryPercent - end.batteryPercent).toDouble()
+        return if (km >= MIN_SEGMENT_KM && RangeEstimate.isPlausibleRide(km, percentUsed)) Segment(ridingMode, km, percentUsed) else null
     }
 
     companion object {

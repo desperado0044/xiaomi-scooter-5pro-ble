@@ -22,7 +22,7 @@ object BackupBundle {
 
     // App lock, last connected scooter and the update cache are deliberately not part of a backup.
     val SETTINGS_KEYS = listOf(
-        "lang", "theme_mode", "keep_screen_on", "auto_brightness", "units",
+        "lang", "theme_mode", "orientation_mode", "keep_screen_on", "auto_brightness", "units",
         "auto_connect", "refresh_rate", "confirm_critical", "ride_tracking", "update_check",
     )
 

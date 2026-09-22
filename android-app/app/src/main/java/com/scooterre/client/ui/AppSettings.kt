@@ -56,9 +56,10 @@ import com.scooterre.client.viewmodel.UiState
 @Composable
 fun AppSettingsScreen(state: UiState, settings: SettingsActions, onBack: () -> Unit) {
     val s = strings(state.language)
+    val isLandscape = androidx.compose.ui.platform.LocalConfiguration.current.let { it.screenWidthDp > it.screenHeightDp }
     Column(modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp)) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 4.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = if (isLandscape) 6.dp else 16.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) { Text("←", fontSize = 22.sp) }
@@ -70,13 +71,14 @@ fun AppSettingsScreen(state: UiState, settings: SettingsActions, onBack: () -> U
             )
         }
         HorizontalDivider()
-        AppSettingsContent(state, s, settings)
+        AppSettingsContent(state, s, settings, isLandscape)
     }
 }
 
 data class SettingsActions(
     val onSetLanguage: (Lang) -> Unit,
     val onSetThemeMode: (ThemeMode) -> Unit,
+    val onSetOrientationMode: (OrientationMode) -> Unit,
     val onSetAutoBrightness: (Boolean) -> Unit,
     val onSetKeepScreenOn: (Boolean) -> Unit,
     val onSetUnits: (UnitSystem) -> Unit,
@@ -145,16 +147,16 @@ private fun SettingsSwitchCard(label: String, hint: String, checked: Boolean, on
 }
 
 @Composable
-fun AppSettingsContent(state: UiState, s: AppStrings, settings: SettingsActions) {
+fun AppSettingsContent(state: UiState, s: AppStrings, settings: SettingsActions, isLandscape: Boolean = false) {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     val versionName = remember {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: "?"
     }
-    Column(
-        modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = 12.dp, bottom = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+    // Split into two roughly-even halves, top-to-bottom order preserved within each - the same
+    // "same width as portrait, side by side instead of stacked" trick as the dashboard's Overview
+    // and its other tabs, so this long list needs noticeably less scrolling in landscape too.
+    val firstHalf: @Composable ColumnScope.() -> Unit = {
         SettingsRadioCard(
             title = s.settingsLanguageLabel,
             hint = null,
@@ -168,6 +170,17 @@ fun AppSettingsContent(state: UiState, s: AppStrings, settings: SettingsActions)
             options = listOf(ThemeMode.SYSTEM to s.themeSystem, ThemeMode.LIGHT to s.themeLight, ThemeMode.DARK to s.themeDark),
             selected = state.themeMode,
             onSelect = settings.onSetThemeMode,
+        )
+        SettingsRadioCard(
+            title = s.orientationLabel,
+            hint = null,
+            options = listOf(
+                OrientationMode.AUTO to s.orientationAuto,
+                OrientationMode.PORTRAIT to s.orientationPortrait,
+                OrientationMode.LANDSCAPE to s.orientationLandscape,
+            ),
+            selected = state.orientationMode,
+            onSelect = settings.onSetOrientationMode,
         )
         SettingsSwitchCard(s.autoBrightnessLabel, s.autoBrightnessHint, state.autoBrightness, settings.onSetAutoBrightness)
         SettingsSwitchCard(s.keepScreenOnLabel, s.keepScreenOnHint, state.keepScreenOn, settings.onSetKeepScreenOn)
@@ -190,6 +203,8 @@ fun AppSettingsContent(state: UiState, s: AppStrings, settings: SettingsActions)
             onSelect = settings.onSetRefreshRate,
         )
         SettingsSwitchCard(s.autoConnectLabel, s.autoConnectHint, state.autoConnect, settings.onSetAutoConnect)
+    }
+    val secondHalf: @Composable ColumnScope.() -> Unit = {
         SettingsSwitchCard(s.confirmCriticalLabel, s.confirmCriticalHint, state.confirmCritical, settings.onSetConfirmCritical)
         SettingsSwitchCard(s.rideTrackingLabel, s.rideTrackingHint, state.rideTracking, settings.onSetRideTracking)
         SettingsSwitchCard(s.updateCheckLabel, s.updateCheckHint, state.updateCheck, settings.onSetUpdateCheck)
@@ -221,6 +236,23 @@ fun AppSettingsContent(state: UiState, s: AppStrings, settings: SettingsActions)
                 TextButton(onClick = settings.onExplore) { Text(s.exploreButton) }
                 Text(s.exploreHint, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+        }
+    }
+    if (isLandscape) {
+        Row(
+            modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = 8.dp, bottom = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), content = firstHalf)
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp), content = secondHalf)
+        }
+    } else {
+        Column(
+            modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = 12.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            firstHalf()
+            secondHalf()
         }
     }
 }

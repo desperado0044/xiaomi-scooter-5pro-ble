@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,6 +22,9 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -50,6 +55,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
@@ -169,6 +175,10 @@ fun DashboardScreen(
     val profile = state.activeSpecProfile
     val propertiesByName = profile.all.associateBy { it.name }
     val context = LocalContext.current
+    // Landscape is used one-handed while riding, mounted on the handlebar - the overview must fit
+    // without scrolling there (see OverviewContent), and the header gives back the height that
+    // costs by dropping its second line.
+    val isLandscape = LocalConfiguration.current.let { it.screenWidthDp > it.screenHeightDp }
     var pendingRideLogExport by remember { mutableStateOf<String?>(null) }
     val rideLogExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
         val text = pendingRideLogExport
@@ -230,7 +240,7 @@ fun DashboardScreen(
     ) {
         Column(modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp)) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 4.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = if (isLandscape) 6.dp else 16.dp, bottom = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -248,7 +258,11 @@ fun DashboardScreen(
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.SemiBold,
                         )
-                        Text(state.macAddress, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        // The MAC address is a second line that only fits in portrait's spare
+                        // height - landscape needs every dp for the values themselves instead.
+                        if (!isLandscape) {
+                            Text(state.macAddress, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
                 if (state.busy) {
@@ -270,26 +284,30 @@ fun DashboardScreen(
                 )
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(selectedSection.emoji, fontSize = 18.sp)
-                Text(
-                    selectedSection.label(s),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(start = 8.dp),
-                )
+            // Same drop as the MAC line above: the section title only earns its keep where height
+            // is not the scarce resource - the drawer itself already shows the current section.
+            if (!isLandscape || selectedSection != DashboardSection.OVERVIEW) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(selectedSection.emoji, fontSize = 18.sp)
+                    Text(
+                        selectedSection.label(s),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
+                HorizontalDivider()
             }
-            HorizontalDivider()
 
             if (selectedSection == DashboardSection.APP_SETTINGS) {
-                AppSettingsContent(state, s, settings)
+                AppSettingsContent(state, s, settings, isLandscape)
             } else if (selectedSection == DashboardSection.HISTORY) {
-                HistoryTabContent(state, s, onResetHistory)
+                HistoryTabContent(state, s, onResetHistory, isLandscape)
             } else if (selectedSection == DashboardSection.OVERVIEW) {
-                OverviewContent(state, s, profile, propertiesByName, guardedSetBool, onSetNumeric, onSetString)
+                OverviewContent(state, s, profile, propertiesByName, guardedSetBool, onSetNumeric, onSetString, isLandscape)
             } else {
                 val activeNames = namesFor(selectedSection, profile).orEmpty()
                 val activeProperties = activeNames.mapNotNull { propertiesByName[it] }
@@ -302,11 +320,19 @@ fun DashboardScreen(
                         modifier = Modifier.padding(top = 8.dp),
                     ) { Text(s.exportRideLogButton) }
                 }
-                LazyColumn(
+                // Landscape gets two columns instead of one, halving how many rows tall the tab
+                // is - the same trick as the Overview split, so a long tab (Battery/Settings, 13
+                // properties) needs far less scrolling, ideally none, without shrinking any row.
+                // RIDE_LOG stays single-column: its rows are whole ride-history sentences, which
+                // would just wrap onto more lines at half width - worse to read, not more compact.
+                val columns = if (isLandscape && selectedSection != DashboardSection.RIDE_LOG) 2 else 1
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(columns),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.padding(top = 12.dp, bottom = 16.dp),
                 ) {
-                    items(activeProperties, key = { it.name }) { property ->
+                    gridItems(activeProperties, key = { it.name }) { property ->
                         PropertyRow(property, state.values[property.name], state.language, profile, guardedSetBool, onSetNumeric, onSetString)
                     }
                 }
@@ -338,9 +364,8 @@ fun DashboardScreen(
  * or null while the values or the recorded rides are missing. */
 private fun habitRangeKm(state: UiState, mode: Long, units: UnitSystem): Double? {
     if (!state.rideTracking) return null
-    val mah = state.values["REMAINING_BATTERY"]?.takeIf { it.ok }?.value as? Long ?: return null
-    val voltage = (state.values["VOLTAGE"]?.takeIf { it.ok }?.value as? Float)?.let { it * 0.01 } ?: return null
-    val km = RangeEstimate.rangeKm(RangeEstimate.remainingWh(mah, voltage), state.efficiencyTotals[mode]) ?: return null
+    val batteryPercent = (state.values["BATTERY_LEVEL"]?.takeIf { it.ok }?.value as? Long)?.toDouble() ?: return null
+    val km = RangeEstimate.rangeKm(batteryPercent, state.modeStats[mode]) ?: return null
     return units.distance(km)
 }
 
@@ -353,43 +378,18 @@ private fun OverviewContent(
     onSetBool: (SpecProperty, Boolean) -> Unit,
     onSetNumeric: (SpecProperty, Long) -> Unit,
     onSetString: (SpecProperty, String) -> Unit,
+    isLandscape: Boolean,
 ) {
     val lang = state.language
-    val remainingResult = state.values["REMAINING_MILEAGE"]
     val units = LocalUnits.current
-    val remainingKm = (remainingResult?.takeIf { it.ok }?.value as? Float)?.let { units.distance(it * 0.01) }
-    val batteryResult = state.values["BATTERY_LEVEL"]
-    val batteryPct = batteryResult?.takeIf { it.ok }?.value as? Long
-    val charging = (state.values["IS_CHARGING"]?.takeIf { it.ok }?.value as? Long) == 1L
     val ridingMode = state.values["RIDING_MODE"]?.takeIf { it.ok }?.value as? Long
 
-    val batteryAccent = when {
-        charging -> Color(0xFF4CAF50)
-        batteryPct != null && batteryPct <= 15L -> MaterialTheme.colorScheme.error
-        else -> Color(0xFF7EA6FF)
-    }
-
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            BigStatCard(
-                modifier = Modifier.weight(1f),
-                value = remainingKm?.let { "%.0f".format(java.util.Locale.US, it) } ?: "–",
-                unit = units.distanceUnit,
-                label = propertyName("REMAINING_MILEAGE", lang),
-                accent = Color(0xFF7EA6FF),
-            )
-            BigStatCard(
-                modifier = Modifier.weight(1f),
-                value = batteryPct?.toString() ?: "–",
-                unit = "%",
-                label = if (charging) (if (lang == Lang.DE) "Lädt gerade" else "Charging now") else propertyName("BATTERY_LEVEL", lang),
-                accent = batteryAccent,
-            )
-        }
-
+    // The top half: the two headline numbers, the read-only/mismatch notice and the mode card -
+    // shared verbatim between portrait (its own column) and landscape (the column's left half).
+    // Splitting it out here, rather than branching inside one giant composable, is what keeps the
+    // two arrangements from silently drifting apart as either one gets edited later.
+    val primary: @Composable ColumnScope.() -> Unit = {
+        RangeAndBatteryRow(state, s, lang, units, ridingMode)
         if (state.activeSpecProfile.readOnly || state.layoutMismatch) {
             Text(
                 if (state.layoutMismatch) s.layoutMismatchError else s.readOnlyNotice,
@@ -397,77 +397,172 @@ private fun OverviewContent(
                 color = MaterialTheme.colorScheme.error,
             )
         }
-
-        ridingMode?.let { mode ->
-            habitRangeKm(state, mode, units)?.let { habit ->
-                val modeName = enumLabel("RIDING_MODE", mode, lang) ?: mode.toString()
-                Text(
-                    s.rangeByHabitFormat(modeName, "%.0f %s".format(java.util.Locale.US, habit, units.distanceUnit)),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            val modeLabel = enumLabel("RIDING_MODE", mode, lang) ?: mode.toString()
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-            ) {
-                Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier.size(44.dp).background(Color(0xFF7EA6FF), shape = CircleShape),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(modeLabel.take(1), color = Color(0xFF0E1220), fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                        }
-                        Column(modifier = Modifier.padding(start = 12.dp)) {
-                            Text(modeLabel, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
-                            Text(
-                                propertyName("RIDING_MODE", lang),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                    // Switching the mode right from the overview - reuses the exact same
-                    // CycleButtons control the Settings tab uses (same fixed Walk/Drive/Sport
-                    // values, same onSetNumeric path), not a second implementation of mode
-                    // switching living here.
-                    if (!profile.readOnly) {
-                        CycleButtons(
-                            propertyName = "RIDING_MODE",
-                            lang = lang,
-                            current = mode,
-                            onSelect = { onSetNumeric(propertiesByName.getValue("RIDING_MODE"), it) },
-                            modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
-                        )
-                    }
-                }
-            }
-        }
-
-        // Recuperation sits right under the mode card: another quick switch for use while riding.
+        ridingMode?.let { mode -> ModeCard(state, s, profile, propertiesByName, lang, units, mode, onSetNumeric) }
+    }
+    // The bottom half: recuperation plus the glance tiles - the part that most benefits from
+    // landscape's extra width (four tiles per row instead of two), so it moves to its own column
+    // there rather than just being stacked under [primary] as it is in portrait.
+    val secondary: @Composable ColumnScope.() -> Unit = {
         propertiesByName["ENERGY_RECOVERY"]?.let { property ->
             PropertyRow(property, state.values["ENERGY_RECOVERY"], lang, profile, onSetBool, onSetNumeric, onSetString)
         }
+        OverviewTileGrid(state, s, lang, profile, propertiesByName, onSetBool, perRow = if (isLandscape) 4 else 2)
+    }
 
-        // Everything else worth a glance during a ride, two per row so the whole overview fits on
-        // one screen without scrolling. Each value is still also shown in its normal category tab.
-        listOf(
-            "IS_RIDING" to "IS_LOCKED",
-            "CURRENT_MILEAGE" to "RIDING_TIME",
-            "AVERAGE_SPEED" to "HIGHEST_SPEED",
-            "BLUETOOTH_CAR_SEARCH" to "FAULT",
-        ).forEach { (left, right) ->
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                for (name in listOf(left, right)) {
-                    val property = propertiesByName[name]
-                    if (property != null) {
-                        OverviewTile(property, state.values[name], lang, s, profile, onSetBool, Modifier.weight(1f))
-                    } else {
-                        Spacer(modifier = Modifier.weight(1f))
-                    }
+    if (isLandscape) {
+        // Mounted on the handlebar in landscape, this screen has to show everything at a glance
+        // with no scrolling (user feedback, 2026-09-22) - two side-by-side columns instead of one
+        // long one, each as wide as portrait's single column used to be (landscape width is
+        // roughly double portrait's), so every card and tap target keeps its portrait size.
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp), content = primary)
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp), content = secondary)
+        }
+    } else {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            primary()
+            secondary()
+        }
+    }
+}
+
+@Composable
+private fun RangeAndBatteryRow(state: UiState, s: AppStrings, lang: Lang, units: UnitSystem, ridingMode: Long?) {
+    val remainingKm = (state.values["REMAINING_MILEAGE"]?.takeIf { it.ok }?.value as? Float)?.let { units.distance(it * 0.01) }
+    val batteryPct = state.values["BATTERY_LEVEL"]?.takeIf { it.ok }?.value as? Long
+    val charging = (state.values["IS_CHARGING"]?.takeIf { it.ok }?.value as? Long) == 1L
+    val batteryAccent = when {
+        charging -> Color(0xFF4CAF50)
+        batteryPct != null && batteryPct <= 15L -> MaterialTheme.colorScheme.error
+        else -> Color(0xFF7EA6FF)
+    }
+    // "Eigene Verbrauchsanalyse" doesn't just gate recording (see the app-settings hint) - it also
+    // picks which range estimate gets the big, prominent number here. On: your own, with the
+    // scooter's own estimate named underneath for comparison, once there is enough data for it -
+    // before that (or with the switch off), the scooter's estimate is the only one shown, exactly
+    // as before this existed.
+    val ownKm = ridingMode?.let { habitRangeKm(state, it, units) }
+    val ownLabel = ridingMode?.let { enumLabel("RIDING_MODE", it, lang) }
+    val showOwn = state.rideTracking && ownKm != null && ownLabel != null
+    // IntrinsicSize.Min + fillMaxHeight: whichever card has more to say (an extra subtitle line
+    // when showOwn is true) sets the row's height, and the other card stretches to match instead
+    // of sitting shorter next to it - matched height, not matched (or padded) text.
+    Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (showOwn) {
+            BigStatCard(
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+                value = "%.0f".format(java.util.Locale.US, ownKm!!),
+                unit = units.distanceUnit,
+                label = s.rangeOwnCardLabel(ownLabel!!),
+                accent = Color(0xFF7EA6FF),
+                subtitle = remainingKm?.let { s.rangeScooterSubtitle("%.0f %s".format(java.util.Locale.US, it, units.distanceUnit)) },
+            )
+        } else {
+            BigStatCard(
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+                value = remainingKm?.let { "%.0f".format(java.util.Locale.US, it) } ?: "–",
+                unit = units.distanceUnit,
+                label = propertyName("REMAINING_MILEAGE", lang),
+                accent = Color(0xFF7EA6FF),
+            )
+        }
+        BigStatCard(
+            modifier = Modifier.weight(1f).fillMaxHeight(),
+            value = batteryPct?.toString() ?: "–",
+            unit = "%",
+            label = if (charging) (if (lang == Lang.DE) "Lädt gerade" else "Charging now") else propertyName("BATTERY_LEVEL", lang),
+            accent = batteryAccent,
+        )
+    }
+}
+
+@Composable
+private fun ModeCard(
+    state: UiState,
+    s: AppStrings,
+    profile: SpecProfile,
+    propertiesByName: Map<String, SpecProperty>,
+    lang: Lang,
+    units: UnitSystem,
+    mode: Long,
+    onSetNumeric: (SpecProperty, Long) -> Unit,
+) {
+    // The range at this mode's own consumption now lives in the headline stat card above (see
+    // RangeAndBatteryRow), as prominent as the scooter's own estimate - not repeated here.
+    val modeLabel = enumLabel("RIDING_MODE", mode, lang) ?: mode.toString()
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier.size(44.dp).background(Color(0xFF7EA6FF), shape = CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(modeLabel.take(1), color = Color(0xFF0E1220), fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                }
+                Column(modifier = Modifier.padding(start = 12.dp)) {
+                    Text(modeLabel, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                    Text(
+                        propertyName("RIDING_MODE", lang),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            // Switching the mode right from the overview - reuses the exact same
+            // CycleButtons control the Settings tab uses (same fixed Walk/Drive/Sport
+            // values, same onSetNumeric path), not a second implementation of mode
+            // switching living here.
+            if (!profile.readOnly) {
+                CycleButtons(
+                    propertyName = "RIDING_MODE",
+                    lang = lang,
+                    current = mode,
+                    onSelect = { onSetNumeric(propertiesByName.getValue("RIDING_MODE"), it) },
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                )
+            }
+        }
+    }
+}
+
+/** Everything else worth a glance during a ride, [perRow] tiles at a time - two in portrait, four
+ * in landscape (see [OverviewContent]) - so the whole overview fits on one screen without
+ * scrolling either way. Each value is still also shown in its normal category tab. */
+@Composable
+private fun OverviewTileGrid(
+    state: UiState,
+    s: AppStrings,
+    lang: Lang,
+    profile: SpecProfile,
+    propertiesByName: Map<String, SpecProperty>,
+    onSetBool: (SpecProperty, Boolean) -> Unit,
+    perRow: Int,
+) {
+    listOf(
+        // IS_RIDING ("Fahrzustand") and FAULT ("Fehler") used to be here too - dropped to keep
+        // the overview from being cut off at the bottom once the "Nach deinem Verbrauch" line is
+        // showing (confirmed on-device, 2026-09-22): both stay one tap away, on the Fahrt and
+        // Fahrzeug tabs, and neither is something you'd read while actually riding anyway.
+        "IS_LOCKED", "CURRENT_MILEAGE", "RIDING_TIME",
+        "AVERAGE_SPEED", "HIGHEST_SPEED", "BLUETOOTH_CAR_SEARCH",
+    ).chunked(perRow).forEach { names ->
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            for (name in names) {
+                val property = propertiesByName[name]
+                if (property != null) {
+                    OverviewTile(property, state.values[name], lang, s, profile, onSetBool, Modifier.weight(1f))
+                } else {
+                    Spacer(modifier = Modifier.weight(1f))
                 }
             }
         }
@@ -545,54 +640,64 @@ private fun OverviewTile(
 }
 
 @Composable
-private fun BigStatCard(modifier: Modifier = Modifier, value: String, unit: String, label: String, accent: Color) {
+private fun BigStatCard(modifier: Modifier = Modifier, value: String, unit: String, label: String, accent: Color, subtitle: String? = null) {
     Card(
         modifier = modifier,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
     ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
             Row(verticalAlignment = Alignment.Bottom) {
                 // Bigger + bolder than a typical stat card (M3 Expressive's 2025 update leans into
-                // larger, heavier numerals for exactly this "glance at the key figure" use case).
-                Text(value, style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold, color = accent)
+                // larger, heavier numerals for exactly this "glance at the key figure" use case) -
+                // sized up once more (displayLarge, more card padding) once there was screen room
+                // to spare for it (confirmed on-device, 2026-09-22): these are the two or three
+                // numbers this whole screen exists to show at a glance while riding.
+                Text(value, style = MaterialTheme.typography.displayLarge, fontWeight = FontWeight.Bold, color = accent)
                 Text(
                     " $unit",
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleLarge,
                     color = accent,
-                    modifier = Modifier.padding(bottom = 5.dp, start = 2.dp),
+                    modifier = Modifier.padding(bottom = 8.dp, start = 2.dp),
                 )
             }
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.height(4.dp))
             Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // The estimate NOT currently shown big (see RangeAndBatteryRow: the "Eigene
+            // Verbrauchsanalyse" switch decides which one that is) - named explicitly so it's
+            // never mistaken for the same figure as the big number above it.
+            subtitle?.let {
+                Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }
 
 @Composable
-private fun HistoryTabContent(state: UiState, s: AppStrings, onResetHistory: () -> Unit) {
+private fun HistoryTabContent(state: UiState, s: AppStrings, onResetHistory: () -> Unit, isLandscape: Boolean) {
     var showResetConfirm by remember { mutableStateOf(false) }
     val locale = if (state.language == Lang.DE) java.util.Locale.GERMANY else java.util.Locale.US
     val units = LocalUnits.current
-    Column(modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (!state.rideTracking) {
+    // A scroll wrapper as the safety net (matches AppSettingsContent) - the landscape split below
+    // usually needs none, but this stops any edge case (many modes, a long log) from becoming
+    // unreachable outright the way this tab's content used to with no scroll container at all.
+    val scrollState = rememberScrollState()
+
+    if (!state.rideTracking || state.modeStats.isEmpty()) {
+        Column(modifier = Modifier.fillMaxWidth().verticalScroll(scrollState).padding(top = 12.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
-                s.consumptionOffText,
+                if (!state.rideTracking) s.consumptionOffText else s.noHistoryYetText,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 16.dp),
             )
-        } else if (state.efficiencyTotals.isEmpty()) {
-            Text(
-                s.noHistoryYetText,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 16.dp),
-            )
-        } else {
-            // Highest-distance mode first (already sorted that way by the store), so the mode
-            // actually ridden the most is what's most prominent, not an arbitrary fixed order.
-            state.efficiencyTotals.entries.sortedByDescending { it.value.totalKm }.forEach { (mode, totals) ->
+            TextButton(onClick = { showResetConfirm = true }) { Text(s.resetHistoryButton) }
+        }
+    } else {
+        // Highest-distance mode first (already sorted that way by the store), so the mode
+        // actually ridden the most is what's most prominent, not an arbitrary fixed order.
+        val modeCards: @Composable ColumnScope.() -> Unit = {
+            state.modeStats.entries.sortedByDescending { it.value.km }.forEach { (mode, stats) ->
                 val modeLabel = enumLabel("RIDING_MODE", mode, state.language) ?: mode.toString()
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -601,12 +706,12 @@ private fun HistoryTabContent(state: UiState, s: AppStrings, onResetHistory: () 
                 ) {
                     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
                         Text(
-                            s.historyKmDrivenFormat(modeLabel, "%.1f %s".format(locale, units.distance(totals.totalKm), units.distanceUnit)),
+                            s.historyKmDrivenFormat(modeLabel, "%.1f %s".format(locale, units.distance(stats.km), units.distanceUnit)),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Medium,
                         )
                         Text(
-                            s.historyWhPerKmFormat("%.1f Wh/%s".format(locale, units.energyPerDistance(totals.whPerKm), units.distanceUnit)),
+                            s.historyConsumptionFormat("%.1f %%/%s".format(locale, stats.percentPerKm, units.distanceUnit)),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -620,28 +725,45 @@ private fun HistoryTabContent(state: UiState, s: AppStrings, onResetHistory: () 
                     }
                 }
             }
-        }
-        if (state.rideTracking && state.efficiencyTotals.isNotEmpty()) {
             Text(s.historyRangeHint, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        if (state.batteryLog.isNotEmpty()) {
-            Text(s.batteryLogTitle, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 12.dp))
-            val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
-            state.batteryLog.takeLast(8).reversed().forEach { e ->
-                val millis = java.time.LocalDate.ofEpochDay(e.epochDay).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
-                Text(
-                    s.batteryLogEntryFormat(
-                        dateFormat.format(java.util.Date(millis)),
-                        e.soh?.let { "$it %" } ?: "–",
-                        e.cycles?.toString() ?: "–",
-                        "%.0f %s".format(locale, units.distance(e.km), units.distanceUnit),
-                    ),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+        val log: @Composable ColumnScope.() -> Unit = {
+            if (state.batteryLog.isNotEmpty()) {
+                Text(s.batteryLogTitle, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+                state.batteryLog.takeLast(8).reversed().forEach { e ->
+                    val millis = java.time.LocalDate.ofEpochDay(e.epochDay).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+                    Text(
+                        s.batteryLogEntryFormat(
+                            dateFormat.format(java.util.Date(millis)),
+                            e.soh?.let { "$it %" } ?: "–",
+                            e.cycles?.toString() ?: "–",
+                            "%.0f %s".format(locale, units.distance(e.km), units.distanceUnit),
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            TextButton(onClick = { showResetConfirm = true }) { Text(s.resetHistoryButton) }
+        }
+        if (isLandscape) {
+            Row(
+                modifier = Modifier.fillMaxWidth().verticalScroll(scrollState).padding(top = 8.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp), content = modeCards)
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp), content = log)
+            }
+        } else {
+            Column(
+                modifier = Modifier.fillMaxWidth().verticalScroll(scrollState).padding(top = 12.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                modeCards()
+                log()
             }
         }
-        TextButton(onClick = { showResetConfirm = true }) { Text(s.resetHistoryButton) }
     }
 
     if (showResetConfirm) {

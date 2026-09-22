@@ -22,7 +22,7 @@ import com.scooterre.client.protocol.DeviceRegistry
 import com.scooterre.client.protocol.DocumentStore
 import com.scooterre.client.protocol.KnownDevice
 import com.scooterre.client.protocol.MiProtocol
-import com.scooterre.client.protocol.ModeEfficiencyTotals
+import com.scooterre.client.protocol.RideWindow
 import com.scooterre.client.protocol.ProtocolException
 import com.scooterre.client.protocol.ScooterDocument
 import com.scooterre.client.protocol.SecureStore
@@ -41,6 +41,7 @@ import com.scooterre.client.reminder.InsuranceSchedule
 import com.scooterre.client.ui.Lang
 import com.scooterre.client.ui.resolveLang
 import com.scooterre.client.ui.ThemeMode
+import com.scooterre.client.ui.OrientationMode
 import com.scooterre.client.ui.UnitSystem
 import com.scooterre.client.ui.distance
 import com.scooterre.client.ui.distanceUnit
@@ -71,6 +72,7 @@ data class UiState(
     val screen: Screen = Screen.LOGIN,
     val language: Lang = resolveLang(null),
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    val orientationMode: OrientationMode = OrientationMode.AUTO,
     val keepScreenOn: Boolean = true,
     val autoBrightness: Boolean = false,
     val units: UnitSystem = UnitSystem.METRIC,
@@ -118,6 +120,14 @@ data class UiState(
     val busy: Boolean = false,
     val busyMessage: String = "",
     val error: String? = null,
+    // Which known device's connect attempt is in flight / most recently failed, for the picker's
+    // per-tile green/red display - kept separate from the shared [error] above, which is also
+    // written by unrelated background calls (e.g. the very first refreshAll right after login, or
+    // a stray in-flight request finishing right as disconnect() tears the connection down); sharing
+    // one field produced an intermittent, misleading red tile even after a clean manual disconnect.
+    val connectingMac: String? = null,
+    val connectFailedMac: String? = null,
+    val connectFailedError: String? = null,
     val needsPin: Boolean = false,
     val pin: String = "",
     val qrPng: ByteArray? = null,
@@ -132,10 +142,11 @@ data class UiState(
     val exportCode: String? = null,
     val exportMac: String? = null,
     val importText: String = "",
-    // Lifetime km ridden + real-world Wh/km per riding mode (11=Walk, 2=Drive, 3=Sport), shown on
-    // the "Verlauf" tab - a battery-health signal the device's own SOH% doesn't capture, since it
-    // reflects actual energy cost per km rather than the device's own internal estimate.
-    val efficiencyTotals: Map<Long, ModeEfficiencyTotals> = emptyMap(),
+    // Rolling-window km ridden + real percent-per-km per riding mode (11=Walk, 2=Drive, 3=Sport,
+    // see RideWindow), shown on the "Verlauf" tab and feeding the range-at-your-consumption
+    // estimate - a battery-health signal the device's own SOH% doesn't capture on its own, since
+    // it reflects actual real-world cost per km rather than the device's internal estimate.
+    val modeStats: Map<Long, RideWindow.Stats> = emptyMap(),
     // Battery health (SOH, charge cycles) once per day and scooter, oldest first - shown on the Verlauf tab.
     val batteryLog: List<BatteryLogEntry> = emptyList(),
     // The first readings after connecting did not fit the property table (unknown model): changes are blocked.
