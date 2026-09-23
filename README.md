@@ -176,7 +176,8 @@ no promise of support or of a schedule — this is a hobby project.
 - **Update button**: when a newer release exists, the notice offers "Download update": the app downloads the APK from
   this project's GitHub release page, checks its checksum and signature and opens the system installer, where you
   confirm. Nothing is ever installed silently. (Google Play Protect may offer to scan a new version once.)
-- **Find scooter**: makes the scooter beep and flash. It needs a switched-on scooter within Bluetooth range.
+- **Find scooter**: makes the scooter beep and flash. Connecting and this both work even with the scooter
+  switched off, as long as it's within Bluetooth range.
 - **Range at your own consumption (live ride log)**: while your phone is connected to the scooter during a ride
   and the app stays open ("Keep screen on" helps), the app records distance and battery percentage used per riding
   mode — without any questions, and without needing the battery's rated capacity or its voltage (which sags under
