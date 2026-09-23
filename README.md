@@ -29,6 +29,10 @@ disclaimer).
 - **No affiliation with, and no support from, Xiaomi.** This project has no relationship with
   Xiaomi Corporation or its affiliates, and is not authorized, sponsored, or reviewed by Xiaomi.
   All trademarks and product names belong to their respective owners.
+- **No server of ours - your data stays on your phone.** The app talks only to the scooter itself
+  (Bluetooth, no network involved), to Xiaomi's own cloud API (one-time login only) and to GitHub
+  (update check/download only, can be turned off). There is no backend of this project's own, no
+  analytics, no tracking of any kind.
 - **No warranty, no guarantee of function, safety, or correctness.** The software is provided
   **"as is"**, without any express or implied warranty — neither fitness for a particular purpose
   nor freedom from defects. A protocol reconstructed through reverse engineering may contain
