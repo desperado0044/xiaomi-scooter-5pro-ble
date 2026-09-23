@@ -711,7 +711,7 @@ private fun HistoryTabContent(state: UiState, s: AppStrings, onResetHistory: () 
                             fontWeight = FontWeight.Medium,
                         )
                         Text(
-                            s.historyConsumptionFormat("%.1f %%/%s".format(locale, stats.percentPerKm, units.distanceUnit)),
+                            s.historyConsumptionFormat("%.1f %%/%s".format(locale, units.ratePerDistance(stats.percentPerKm), units.distanceUnit)),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
