@@ -198,6 +198,7 @@ fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
                         onSetNumeric = viewModel::setNumericProperty,
                         onSetString = viewModel::setStringProperty,
                         onResetHistory = viewModel::resetEfficiencyHistory,
+                        onDismissRideBookNote = viewModel::dismissRideBookNote,
                         settings = settingsActions,
                     )
                     Screen.DEVICE_PICKER -> DevicePickerScreen(

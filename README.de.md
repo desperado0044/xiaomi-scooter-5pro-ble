@@ -118,10 +118,16 @@ ist ein Hobbyprojekt.
 - **Seitenmenü** mit den Bereichen Fahrt, Akku, Einstellungen, Fahrzeug, Identifikation,
   Fahrtenbuch, Verlauf und App-Einstellungen. Alle bekannten MIoT-Properties mit korrekter
   Einheiten-/Skalierungsanzeige und Klartext statt Rohwerten; die meisten Einstellungen sind
-  setzbar, mit Sicherheits-/Rechtshinweis bei regional heiklen Funktionen (Tempomat, Rücklicht).
+  setzbar, mit Sicherheits-/Rechtshinweis bei regional heiklen Funktionen (Tempomat, Rücklicht). Durch Wischen nach links/rechts wechselst du zwischen den
+  Bereichen des Scooters (nicht in den App-Einstellungen).
 - **Live-Werte**: automatische Aktualisierung; während der Fahrt etwa alle 2,5 s (die
   fahrrelevanten Werte), im Stand einstellbar (sparsam/normal/schnell).
-- **Fahrtenbuch** (die letzten Fahrten des Scooters) als Datei exportierbar.
+- **Fahrtenbuch**: Der Scooter merkt sich selbst nur die letzten 5 Fahrtenbuch-Plätze und überschreibt die
+  ältesten. Bei jedem Auslesen kopiert die App neue Fahrten in ein Fahrtenbuch auf dem Handy (ein kurzer Hinweis
+  „n neue Fahrten importiert" erscheint 5 Sekunden), nach Tagen gruppiert mit Strecke, Fahrzeit und
+  Durchschnittstempo. Fahrten, die schon im Scooter waren, als das Fahrtenbuch begann, haben kein Datum. Als
+  Textdatei exportierbar. Eine Fahrt, die aus den Plätzen des Scooters herausgerutscht ist, bevor die App ihn
+  wieder ausliest, geht verloren.
 - **Reifenwartung**: Erinnerung ein/aus und Intervall (14–180 Tage) einstellbar.
 - **Homescreen-Widget** mit dem letzten Stand (Akku, Sperre, Reichweite).
 
@@ -204,8 +210,10 @@ ist ein Hobbyprojekt.
   wer das Handy nicht während der Fahrt verbindet, sieht immer nur die Schätzung des Scooters (Firmware). Der
   Schalter in den App-Einstellungen („Eigene Verbrauchsanalyse", standardmäßig an) entscheidet, welcher der beiden
   Werte groß angezeigt wird: an wählt den eigenen, sobald genug Daten da sind, aus zeigt immer die
-  Scooter-Schätzung und zeichnet nichts auf. Der Tab „Verlauf" listet ihn je Modus auf und führt außerdem ein
-  tägliches Akku-Gesundheits-Log (Gesundheit, Zyklen, Kilometerstand); ein Knopf „Verlauf zurücksetzen" dort löscht
+  Scooter-Schätzung und zeichnet nichts auf. Der Tab „Verlauf" listet ihn je Modus auf, zeigt die letzten
+  Fahrten als Diagramm und je Fahrt eine Karte (Uhrzeit, Modus, Strecke, Verbrauch, Fahrzeit, Durchschnittstempo;
+  nur für Fahrten ab v3.5, ältere stehen als eine Summenzeile) und führt ein Akku-Gesundheits-Log (Gesundheit,
+  Zyklen, Kilometerstand), das nur bei einer Änderung von Gesundheit oder Zyklen eine neue Zeile bekommt; ein Knopf „Verlauf zurücksetzen" dort löscht
   alle aufgezeichnete Strecke/Verbrauch für einen Neustart, z.B. nach einem Akkutausch — das 300-km-Fenster fängt
   allmähliche Alterung schon von selbst ab, das ist nur für einen plötzlichen, einmaligen Wechsel gedacht.
 - **Diagnose kopieren**: Ein Knopf in den App-Einstellungen kopiert App-, Handy- und Scooter-Modell, Einstellungen und die

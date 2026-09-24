@@ -26,6 +26,8 @@ import com.scooterre.client.protocol.MiProtocol
 import com.scooterre.client.protocol.ModelSupport
 import com.scooterre.client.protocol.RideWindow
 import com.scooterre.client.protocol.LiveRideTracker
+import com.scooterre.client.protocol.RideBook
+import com.scooterre.client.protocol.RideBookStore
 import com.scooterre.client.protocol.PropertyExplorer
 import com.scooterre.client.protocol.ProtocolException
 import com.scooterre.client.protocol.ScooterDocument
@@ -669,6 +671,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
                     }
                     _state.update { it.copy(values = it.values + results) }
                     trackLiveRide()
+                    if (!riding) importRideBook()
                     pushWidgetUpdate()
                 } catch (e: Exception) {
                     android.util.Log.w("ScooterVM", "auto-refresh tick failed", e)
@@ -720,6 +723,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         deviceRegistry.remove(mac)
         documentStore.deleteAll(mac)
         batteryHistoryStore.clear(mac)
+        rideBookStore.clear(mac)
         _state.update { it.copy(hasSavedLtmk = false, knownDevices = deviceRegistry.list()) }
         documents.refreshDocuments()
     }
@@ -727,15 +731,23 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     fun refreshAll() = launchBusy(s.readingValuesBusy, connectionScope ?: viewModelScope) {
         val spec = protocol?.requireSpecClient() ?: return@launchBusy
         val profile = _state.value.activeSpecProfile
-        for (property in profile.all) {
+        // Recorded rides first, and everything the overview shows (charge and mode for the own range estimate
+        // first of all) at the head of the sweep, so it is there right after connecting, not after the whole pass.
+        _state.update { it.copy(modeStats = batteryHistoryStore.windowStats(it.macAddress), rideLog = batteryHistoryStore.rideLog(it.macAddress), batteryLog = batteryHistoryStore.dailyLog(it.macAddress), rideBook = rideBookStore.entries(it.macAddress)) }
+        val firstNames = listOf(
+            "BATTERY_LEVEL", "RIDING_MODE", "REMAINING_MILEAGE", "IS_CHARGING", "ENERGY_RECOVERY",
+            "IS_LOCKED", "CURRENT_MILEAGE", "RIDING_TIME", "AVERAGE_SPEED", "HIGHEST_SPEED",
+        )
+        for (property in profile.all.sortedBy { firstNames.indexOf(it.name).let { i -> if (i < 0) firstNames.size else i } }) {
             if (property.name in profile.writeOnly) continue
             val result = withContext(Dispatchers.IO) { spec.get(property) }
             _state.update { it.copy(values = it.values + (property.name to result)) }
         }
         checkLayout()
         trackLiveRide()
+        importRideBook()
         recordBatteryLog()
-        _state.update { it.copy(modeStats = batteryHistoryStore.windowStats(it.macAddress), batteryLog = batteryHistoryStore.dailyLog(it.macAddress)) }
+        _state.update { it.copy(modeStats = batteryHistoryStore.windowStats(it.macAddress), rideLog = batteryHistoryStore.rideLog(it.macAddress), batteryLog = batteryHistoryStore.dailyLog(it.macAddress)) }
         pushWidgetUpdate()
     }
 
@@ -777,14 +789,29 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         val km = (values["TOTAL_MILEAGE"]?.takeIf { it.ok }?.value as? Float)?.let { it * 0.01 } ?: return
         val batteryPercent = long("BATTERY_LEVEL") ?: return
         // Same "not standing" fix as startAutoRefresh's own IS_RIDING check just above - see its comment.
-        val segments = liveRide.onReading(LiveRideTracker.Reading(km, batteryPercent), riding = (long("IS_RIDING") ?: 0L) != 0L, currentMode = long("RIDING_MODE"))
+        val segments = liveRide.onReading(LiveRideTracker.Reading(km, batteryPercent, System.currentTimeMillis()), riding = (long("IS_RIDING") ?: 0L) != 0L, currentMode = long("RIDING_MODE"))
         if (segments.isEmpty()) return
         segments.forEach {
             Diagnostics.note("live ride segment: mode=${it.mode} km=%.2f pct=%.1f".format(it.km, it.percentUsed))
-            batteryHistoryStore.addSegment(state.macAddress, it.mode, it.km, it.percentUsed)
+            batteryHistoryStore.addSegment(state.macAddress, it.mode, it.km, it.percentUsed, it.startMs, it.endMs)
         }
-        _state.update { it.copy(modeStats = batteryHistoryStore.windowStats(it.macAddress)) }
+        _state.update { it.copy(modeStats = batteryHistoryStore.windowStats(it.macAddress), rideLog = batteryHistoryStore.rideLog(it.macAddress)) }
     }
+
+    private val rideBookStore = RideBookStore(application)
+
+    /** Copies rides the scooter has newly logged (LOG_1..LOG_5) into the ride book - see [RideBook]. Only when all
+     * five slots were read successfully, so a failed read is never mistaken for "the log is empty". */
+    private fun importRideBook() {
+        val state = _state.value
+        val raws = (1..5).map { state.values["LOG_$it"]?.takeIf { r -> r.ok }?.value as? String }
+        if (raws.any { it == null }) return
+        val added = rideBookStore.import(state.macAddress, raws.flatMap { RideBook.parse(it!!) })
+        _state.update { it.copy(rideBook = rideBookStore.entries(it.macAddress), rideBookNew = it.rideBookNew + added) }
+    }
+
+    /** The "n new rides imported" note has been shown - forget it. */
+    fun dismissRideBookNote() = _state.update { it.copy(rideBookNew = 0) }
 
     private var layoutChecked = false
 
@@ -823,7 +850,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     fun resetEfficiencyHistory() {
         val mac = _state.value.macAddress
         batteryHistoryStore.clear(mac)
-        _state.update { it.copy(modeStats = batteryHistoryStore.windowStats(mac), batteryLog = batteryHistoryStore.dailyLog(mac)) }
+        _state.update { it.copy(modeStats = batteryHistoryStore.windowStats(mac), rideLog = batteryHistoryStore.rideLog(mac), batteryLog = batteryHistoryStore.dailyLog(mac)) }
     }
 
     fun refreshOne(property: SpecProperty) = launchBusy(null, connectionScope ?: viewModelScope) {

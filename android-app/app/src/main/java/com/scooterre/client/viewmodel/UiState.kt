@@ -22,6 +22,8 @@ import com.scooterre.client.protocol.DeviceRegistry
 import com.scooterre.client.protocol.DocumentStore
 import com.scooterre.client.protocol.KnownDevice
 import com.scooterre.client.protocol.MiProtocol
+import com.scooterre.client.protocol.RideBookEntry
+import com.scooterre.client.protocol.RideLog
 import com.scooterre.client.protocol.RideWindow
 import com.scooterre.client.protocol.ProtocolException
 import com.scooterre.client.protocol.ScooterDocument
@@ -147,8 +149,12 @@ data class UiState(
     // estimate - a battery-health signal the device's own SOH% doesn't capture on its own, since
     // it reflects actual real-world cost per km rather than the device's internal estimate.
     val modeStats: Map<Long, RideWindow.Stats> = emptyMap(),
+    val rideLog: RideLog.Result = RideLog.Result(emptyList(), null),
     // Battery health (SOH, charge cycles) once per day and scooter, oldest first - shown on the Verlauf tab.
     val batteryLog: List<BatteryLogEntry> = emptyList(),
+    /** The ride book (see [RideBook]) and how many rides were added to it since the tab last showed the note. */
+    val rideBook: List<RideBookEntry> = emptyList(),
+    val rideBookNew: Int = 0,
     // The first readings after connecting did not fit the property table (unknown model): changes are blocked.
     val layoutMismatch: Boolean = false,
     // The text of a read-only property sweep (see PropertyExplorer), shown in a dialog to copy.

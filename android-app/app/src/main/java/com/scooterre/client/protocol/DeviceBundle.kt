@@ -64,6 +64,7 @@ object DeviceBundle {
         device.name?.let { manifest.put("name", it) }
         window?.let { manifest.put("rideWindow", JSONArray(it)) }
         BatteryHistoryStore(context).exportLogRaw(device.mac)?.let { manifest.put("batteryLog", JSONArray(it)) }
+        RideBookStore(context).exportRaw(device.mac)?.let { manifest.put("rideBook", JSONArray(it)) }
         manifest.put(
             "documents",
             JSONArray(docs.map { d -> JSONObject().put("id", d.id).put("name", d.name).put("pages", JSONArray(d.pages)).put("added", d.addedMillis) }),
@@ -122,6 +123,7 @@ object DeviceBundle {
             DeviceRegistry(context).upsert(device)
             BatteryHistoryStore(context).importWindowRaw(mac, manifest.optJSONArray("rideWindow")?.toString())
             BatteryHistoryStore(context).importLogRaw(mac, manifest.optJSONArray("batteryLog")?.toString())
+            RideBookStore(context).importRaw(mac, manifest.optJSONArray("rideBook")?.toString())
 
             val docStore = DocumentStore(context)
             val docs = manifest.optJSONArray("documents") ?: JSONArray()

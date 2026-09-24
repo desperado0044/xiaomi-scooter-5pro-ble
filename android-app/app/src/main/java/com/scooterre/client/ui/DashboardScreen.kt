@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,11 +22,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -47,11 +52,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -59,10 +67,13 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.scooterre.client.protocol.RangeEstimate
+import com.scooterre.client.protocol.RideBookEntry
+import com.scooterre.client.protocol.RideTrip
 import com.scooterre.client.protocol.SpecProfile
 import com.scooterre.client.protocol.SpecProperty
 import com.scooterre.client.protocol.SpecReadResult
@@ -103,6 +114,40 @@ private fun namesFor(section: DashboardSection, profile: SpecProfile): List<Stri
     DashboardSection.APP_SETTINGS -> null
 }
 
+/** The scooter tabs as horizontally swipeable pages - an alternative to the side menu. App settings
+ * are deliberately not a page (no swiping there). [selected] stays the single source of truth,
+ * shared with the menu and the back gesture: a change from outside scrolls the pager, a swipe that
+ * settles on a page reports it through [onSelected]. The pager state is created per entry, so
+ * coming back from the app settings starts on the right page instead of flashing another first. */
+@Composable
+private fun SectionPager(
+    selected: DashboardSection,
+    onSelected: (DashboardSection) -> Unit,
+    modifier: Modifier,
+    content: @Composable (DashboardSection) -> Unit,
+) {
+    val pages = remember { DashboardSection.entries.filter { it != DashboardSection.APP_SETTINGS } }
+    val pagerState = rememberPagerState(initialPage = pages.indexOf(selected).coerceAtLeast(0)) { pages.size }
+    val currentOnSelected by rememberUpdatedState(onSelected)
+
+    LaunchedEffect(selected) {
+        val target = pages.indexOf(selected)
+        if (target >= 0 && target != pagerState.currentPage) {
+            // A neighbouring page animates; a far jump from the menu snaps instead of scrolling
+            // through every tab in between.
+            if (kotlin.math.abs(target - pagerState.currentPage) == 1) pagerState.animateScrollToPage(target)
+            else pagerState.scrollToPage(target)
+        }
+    }
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.settledPage }.collect { currentOnSelected(pages[it]) }
+    }
+
+    HorizontalPager(state = pagerState, modifier = modifier, verticalAlignment = Alignment.Top) { index ->
+        Column(modifier = Modifier.fillMaxWidth()) { content(pages[index]) }
+    }
+}
+
 /** Scale factor for numeric properties. Confirmed against the plugin's own UNITS table and
  * verified raw-byte captures from the real device (docs/RESEARCH_LOG.md) - several of these
  * (distances, voltage, speeds) are FLOAT on the wire but actually store value*100 as a
@@ -140,24 +185,31 @@ private fun formatDateString(raw: String): String {
     }
 }
 
-/** The device only remembers its 5 most recent ride-log slots (LOG_1..LOG_5, siid=6) - a new
- * ride overwrites the oldest one, so anything older is gone for good unless saved externally
- * first. Reuses [formatRideLog], the exact same decoder the Ride-Log tab itself displays, so the
- * exported text always matches what's on screen. */
+/** The whole ride book as plain text, newest first - see [RideBook]. */
 private fun buildRideLogExportText(state: UiState, s: AppStrings): String {
+    val locale = if (state.language == Lang.DE) java.util.Locale.GERMANY else java.util.Locale.US
+    val units = state.units
+    val stamp = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
     val header = buildString {
         append(state.deviceName ?: modelDisplayName(state.activeModel, state.language))
         append(" (").append(state.macAddress).append(")\n")
-        append(java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date()))
+        append(stamp.format(java.util.Date()))
         append("\n\n")
     }
-    val lines = listOf("LOG_1", "LOG_2", "LOG_3", "LOG_4", "LOG_5").map { name ->
-        val raw = state.values[name]?.value as? String
-        val text = if (raw != null) formatRideLog(raw, state.language, state.units) else s.loadingPlaceholder
-        "${propertyName(name, state.language)}: $text"
+    val lines = orderedRideBook(state.rideBook).map { e ->
+        val r = e.record
+        val whenText = if (e.savedMs > 0) stamp.format(java.util.Date(e.savedMs)) else s.rideBookUndated
+        "%s: %s, %.1f %s, %s %.1f %s".format(
+            locale, whenText, formatRideDuration((r.minutes * 60_000).toLong()), units.distance(r.km), units.distanceUnit,
+            s.rideBookAvgLabel, units.speed(r.avgKmh), units.speedUnit,
+        )
     }
     return header + lines.joinToString("\n")
 }
+
+/** Dated rides newest first, then the ones from before the ride book existed (no time known). */
+private fun orderedRideBook(book: List<RideBookEntry>): List<RideBookEntry> =
+    book.filter { it.savedMs > 0 }.reversed().sortedByDescending { it.savedMs } + book.filter { it.savedMs <= 0 }
 
 @Composable
 fun DashboardScreen(
@@ -169,6 +221,7 @@ fun DashboardScreen(
     onSetNumeric: (SpecProperty, Long) -> Unit,
     onSetString: (SpecProperty, String) -> Unit,
     onResetHistory: () -> Unit,
+    onDismissRideBookNote: () -> Unit,
     settings: SettingsActions,
 ) {
     val s = strings(state.language)
@@ -209,6 +262,10 @@ fun DashboardScreen(
 
     ModalNavigationDrawer(
         drawerState = drawerState,
+        // Swiping right anywhere on the content would otherwise open the menu and fight with the
+        // tab pager's "previous tab" swipe - the menu opens via the hamburger button only, but an
+        // open menu can still be swiped shut.
+        gesturesEnabled = drawerState.isOpen,
         drawerContent = {
             ModalDrawerSheet {
                 Text(
@@ -302,40 +359,51 @@ fun DashboardScreen(
                 HorizontalDivider()
             }
 
-            if (selectedSection == DashboardSection.APP_SETTINGS) {
-                AppSettingsContent(state, s, settings, isLandscape)
-            } else if (selectedSection == DashboardSection.HISTORY) {
-                HistoryTabContent(state, s, onResetHistory, isLandscape)
-            } else if (selectedSection == DashboardSection.OVERVIEW) {
-                OverviewContent(state, s, profile, propertiesByName, guardedSetBool, onSetNumeric, onSetString, isLandscape)
-            } else {
-                val activeNames = namesFor(selectedSection, profile).orEmpty()
-                val activeProperties = activeNames.mapNotNull { propertiesByName[it] }
-                if (selectedSection == DashboardSection.RIDE_LOG) {
-                    TextButton(
-                        onClick = {
+            // One scooter tab's content - rendered as a page of the swipe pager below.
+            val renderSection: @Composable (DashboardSection) -> Unit = { section ->
+                if (section == DashboardSection.HISTORY) {
+                    HistoryTabContent(state, s, onResetHistory, isLandscape)
+                } else if (section == DashboardSection.OVERVIEW) {
+                    OverviewContent(state, s, profile, propertiesByName, guardedSetBool, onSetNumeric, onSetString, isLandscape)
+                } else if (section == DashboardSection.RIDE_LOG) {
+                    RideBookContent(
+                        state, s, isLandscape, onDismissRideBookNote,
+                        onExport = {
                             pendingRideLogExport = buildRideLogExportText(state, s)
                             rideLogExportLauncher.launch("fahrtenbuch.txt")
                         },
-                        modifier = Modifier.padding(top = 8.dp),
-                    ) { Text(s.exportRideLogButton) }
-                }
-                // Landscape gets two columns instead of one, halving how many rows tall the tab
-                // is - the same trick as the Overview split, so a long tab (Battery/Settings, 13
-                // properties) needs far less scrolling, ideally none, without shrinking any row.
-                // RIDE_LOG stays single-column: its rows are whole ride-history sentences, which
-                // would just wrap onto more lines at half width - worse to read, not more compact.
-                val columns = if (isLandscape && selectedSection != DashboardSection.RIDE_LOG) 2 else 1
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(columns),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.padding(top = 12.dp, bottom = 16.dp),
-                ) {
-                    gridItems(activeProperties, key = { it.name }) { property ->
-                        PropertyRow(property, state.values[property.name], state.language, profile, guardedSetBool, onSetNumeric, onSetString)
+                    )
+                } else {
+                    val activeNames = namesFor(section, profile).orEmpty()
+                    val activeProperties = activeNames.mapNotNull { propertiesByName[it] }
+                    // Landscape gets two columns instead of one, halving how many rows tall the tab
+                    // is - the same trick as the Overview split, so a long tab (Battery/Settings, 13
+                    // properties) needs far less scrolling, ideally none, without shrinking any row.
+                    val columns = if (isLandscape) 2 else 1
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(columns),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.padding(top = 12.dp, bottom = 16.dp),
+                    ) {
+                        gridItems(activeProperties, key = { it.name }) { property ->
+                            PropertyRow(property, state.values[property.name], state.language, profile, guardedSetBool, onSetNumeric, onSetString)
+                        }
                     }
                 }
+            }
+
+            // App settings stay outside the pager: no swiping there (and none on the device list,
+            // which isn't part of this screen at all).
+            if (selectedSection == DashboardSection.APP_SETTINGS) {
+                AppSettingsContent(state, s, settings, isLandscape)
+            } else {
+                SectionPager(
+                    selected = selectedSection,
+                    onSelected = { selectedSection = it },
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    content = renderSection,
+                )
             }
         }
     }
@@ -673,6 +741,151 @@ private fun BigStatCard(modifier: Modifier = Modifier, value: String, unit: Stri
     }
 }
 
+/** The rides of one day (or the undated ones), shown together in one card - not added up. */
+private data class BookDay(val label: String, val rides: List<RideBookEntry>)
+
+/** The ride book: every ride the scooter has logged since the app first saw it (see [RideBook]). */
+@Composable
+private fun RideBookContent(state: UiState, s: AppStrings, isLandscape: Boolean, onDismissNote: () -> Unit, onExport: () -> Unit) {
+    val locale = if (state.language == Lang.DE) java.util.Locale.GERMANY else java.util.Locale.US
+    val units = LocalUnits.current
+    // The "n new rides imported" note stays for 5 seconds once this tab is showing; a further import
+    // during that time restarts the timer.
+    LaunchedEffect(state.rideBookNew) {
+        if (state.rideBookNew > 0) {
+            kotlinx.coroutines.delay(5_000)
+            onDismissNote()
+        }
+    }
+    val book = state.rideBook
+    if (book.isEmpty()) {
+        Text(s.noRidesYet, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 16.dp))
+        return
+    }
+    val today = java.time.LocalDate.now()
+    val zone = java.time.ZoneId.systemDefault()
+    val dayFormat = java.text.SimpleDateFormat("EEEE, dd.MM.yyyy", locale)
+    val days = remember(book, state.language) {
+        val out = mutableListOf<BookDay>()
+        for (e in orderedRideBook(book)) {
+            val label = if (e.savedMs > 0) {
+                when (val day = java.time.Instant.ofEpochMilli(e.savedMs).atZone(zone).toLocalDate()) {
+                    today -> s.rideBookToday
+                    today.minusDays(1) -> s.rideBookYesterday
+                    else -> dayFormat.format(java.util.Date(e.savedMs))
+                }
+            } else {
+                s.rideBookUndated
+            }
+            if (out.lastOrNull()?.label == label) out[out.lastIndex] = out.last().copy(rides = out.last().rides + e) else out += BookDay(label, listOf(e))
+        }
+        out
+    }
+    val longest = book.maxOf { it.record.km }.coerceAtLeast(0.1)
+    val totalKm = book.sumOf { it.record.km }
+    val columns = if (isLandscape) 2 else 1
+    val fullWidth: androidx.compose.foundation.lazy.grid.LazyGridItemSpanScope.() -> androidx.compose.foundation.lazy.grid.GridItemSpan =
+        { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(columns),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(top = 12.dp, bottom = 16.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        if (state.rideBookNew > 0) {
+            item(span = fullWidth) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                ) {
+                    Text(
+                        s.rideBookNewFormat(state.rideBookNew),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                    )
+                }
+            }
+        }
+        item(span = fullWidth) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                BookStat(Modifier.weight(1f), book.size.toString(), s.rideBookCountLabel)
+                BookStat(Modifier.weight(1f), "%.0f %s".format(locale, units.distance(totalKm), units.distanceUnit), s.rideBookTotalLabel)
+                BookStat(Modifier.weight(1f), "%.1f %s".format(locale, units.distance(totalKm / book.size), units.distanceUnit), s.rideBookPerRideLabel)
+            }
+        }
+        days.forEach { day ->
+            item { BookDayCard(day, longest, s, locale) }
+        }
+        item(span = fullWidth) {
+            TextButton(onClick = onExport) { Text(s.exportRideLogButton) }
+        }
+    }
+}
+
+@Composable
+private fun BookStat(modifier: Modifier, value: String, label: String) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = Color(0xFF7EA6FF), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+private fun BookDayCard(day: BookDay, longestKm: Double, s: AppStrings, locale: java.util.Locale) {
+    val units = LocalUnits.current
+    val timeFormat = java.text.SimpleDateFormat("HH:mm", locale)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Text(day.label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary)
+            day.rides.forEach { entry ->
+                val r = entry.record
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        "%.1f %s".format(locale, units.distance(r.km), units.distanceUnit),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Column(horizontalAlignment = Alignment.End) {
+                        if (entry.savedMs > 0) {
+                            Text(timeFormat.format(java.util.Date(entry.savedMs)), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Text(formatRideDuration((r.minutes * 60_000).toLong()), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                    }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Box(modifier = Modifier.fillMaxWidth().height(6.dp).background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f), RoundedCornerShape(50))) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth((r.km / longestKm).toFloat().coerceIn(0.04f, 1f))
+                            .fillMaxHeight()
+                            .background(Color(0xFF7EA6FF), RoundedCornerShape(50)),
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "${s.rideBookAvgLabel} %.0f %s".format(locale, units.speed(r.avgKmh), units.speedUnit),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun HistoryTabContent(state: UiState, s: AppStrings, onResetHistory: () -> Unit, isLandscape: Boolean) {
     var showResetConfirm by remember { mutableStateOf(false) }
@@ -704,47 +917,54 @@ private fun HistoryTabContent(state: UiState, s: AppStrings, onResetHistory: () 
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
                     elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 ) {
-                    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
-                        Text(
-                            s.historyKmDrivenFormat(modeLabel, "%.1f %s".format(locale, units.distance(stats.km), units.distanceUnit)),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium,
-                        )
-                        Text(
-                            s.historyConsumptionFormat("%.1f %%/%s".format(locale, units.ratePerDistance(stats.percentPerKm), units.distanceUnit)),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        habitRangeKm(state, mode, units)?.let { habit ->
+                    Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+                        Box(modifier = Modifier.width(5.dp).fillMaxHeight().background(modeColor(mode)))
+                        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
                             Text(
-                                s.historyRangeFormat("%.0f %s".format(locale, habit, units.distanceUnit)),
+                                s.historyKmDrivenFormat(modeLabel, "%.1f %s".format(locale, units.distance(stats.km), units.distanceUnit)),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Medium,
+                            )
+                            Text(
+                                s.historyConsumptionFormat("%.1f %%/%s".format(locale, units.ratePerDistance(stats.percentPerKm), units.distanceUnit)),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                            habitRangeKm(state, mode, units)?.let { habit ->
+                                Text(
+                                    s.historyRangeFormat("%.0f %s".format(locale, habit, units.distanceUnit)),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
                 }
             }
             Text(s.historyRangeHint, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        val log: @Composable ColumnScope.() -> Unit = {
-            if (state.batteryLog.isNotEmpty()) {
-                Text(s.batteryLogTitle, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
-                val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
-                state.batteryLog.takeLast(8).reversed().forEach { e ->
-                    val millis = java.time.LocalDate.ofEpochDay(e.epochDay).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
-                    Text(
-                        s.batteryLogEntryFormat(
-                            dateFormat.format(java.util.Date(millis)),
-                            e.soh?.let { "$it %" } ?: "–",
-                            e.cycles?.toString() ?: "–",
-                            "%.0f %s".format(locale, units.distance(e.km), units.distanceUnit),
-                        ),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+        val rides: @Composable ColumnScope.() -> Unit = {
+            val trips = state.rideLog.trips
+            if (trips.isNotEmpty()) {
+                RideChart(trips.takeLast(12), s, state.language, locale)
+                Text(s.recentRidesTitle, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 6.dp))
+                val recent = trips.takeLast(20).reversed()
+                val worst = recent.maxOf { it.percentPerKm }.coerceAtLeast(0.01)
+                recent.forEach { RideCard(it, worst, s, state.language, locale) }
             }
+            state.rideLog.untimed?.let { old ->
+                Text(
+                    s.earlierRidesFormat(
+                        "%.1f %s".format(locale, units.distance(old.km), units.distanceUnit),
+                        "%.1f %%/%s".format(locale, units.ratePerDistance(old.percentPerKm), units.distanceUnit),
+                    ),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        val health: @Composable ColumnScope.() -> Unit = {
+            BatteryHealthCard(state, s, locale)
             TextButton(onClick = { showResetConfirm = true }) { Text(s.resetHistoryButton) }
         }
         if (isLandscape) {
@@ -752,8 +972,11 @@ private fun HistoryTabContent(state: UiState, s: AppStrings, onResetHistory: () 
                 modifier = Modifier.fillMaxWidth().verticalScroll(scrollState).padding(top = 8.dp, bottom = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp), content = modeCards)
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp), content = log)
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    modeCards()
+                    health()
+                }
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp), content = rides)
             }
         } else {
             Column(
@@ -761,7 +984,8 @@ private fun HistoryTabContent(state: UiState, s: AppStrings, onResetHistory: () 
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 modeCards()
-                log()
+                rides()
+                health()
             }
         }
     }
@@ -777,6 +1001,168 @@ private fun HistoryTabContent(state: UiState, s: AppStrings, onResetHistory: () 
             dismissButton = { TextButton(onClick = { showResetConfirm = false }) { Text(s.cancelButton) } },
         )
     }
+}
+
+/** Fixed per riding mode (11 Walk, 2 Drive, 3 Sport), the same in every chart and chip. */
+private fun modeColor(mode: Long): Color = when (mode) {
+    11L -> Color(0xFF43A047)
+    2L -> Color(0xFF1E88E5)
+    3L -> Color(0xFFF4511E)
+    else -> Color(0xFF8E8E93)
+}
+
+private fun formatRideDuration(ms: Long): String {
+    val minutes = ((ms + 30_000) / 60_000).toInt().coerceAtLeast(1)
+    return if (minutes >= 60) "%d h %02d min".format(minutes / 60, minutes % 60) else "$minutes min"
+}
+
+@Composable
+private fun ModeChip(mode: Long, lang: Lang) {
+    val color = modeColor(mode)
+    Row(
+        modifier = Modifier.background(color.copy(alpha = 0.18f), RoundedCornerShape(50)).padding(horizontal = 10.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(modifier = Modifier.size(8.dp).background(color, CircleShape))
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(enumLabel("RIDING_MODE", mode, lang) ?: mode.toString(), style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+/** One bar per recent ride, oldest to newest, coloured by the mode ridden most - taller = thirstier. */
+@Composable
+private fun RideChart(trips: List<RideTrip>, s: AppStrings, lang: Lang, locale: java.util.Locale) {
+    val units = LocalUnits.current
+    val rates = trips.map { units.ratePerDistance(it.percentPerKm) }
+    val top = rates.max().coerceAtLeast(0.01)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(s.rideChartTitle, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                Text("max %.1f %%/%s".format(locale, top, units.distanceUnit), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().height(84.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                trips.forEachIndexed { i, t ->
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight((rates[i] / top).toFloat().coerceIn(0.06f, 1f))
+                            .background(modeColor(t.mode), RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)),
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                trips.map { it.mode }.distinct().sorted().forEach { ModeChip(it, lang) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RideCard(trip: RideTrip, worstPerKm: Double, s: AppStrings, lang: Lang, locale: java.util.Locale) {
+    val units = LocalUnits.current
+    val color = modeColor(trip.mode)
+    val dateFormat = java.text.SimpleDateFormat("EEE, dd.MM. HH:mm", locale)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(dateFormat.format(java.util.Date(trip.startMs)), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    trip.modeKm.forEach { ModeChip(it.first, lang) }
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
+                Text(
+                    "%.1f %s".format(locale, units.distance(trip.km), units.distanceUnit),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        "%.1f %%/%s".format(locale, units.ratePerDistance(trip.percentPerKm), units.distanceUnit),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    Text(
+                        s.rideBatteryUsedFormat("%.0f %%".format(locale, trip.percentUsed)),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Box(modifier = Modifier.fillMaxWidth().height(6.dp).background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f), RoundedCornerShape(50))) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth((trip.percentPerKm / worstPerKm).toFloat().coerceIn(0.04f, 1f))
+                        .fillMaxHeight()
+                        .background(color, RoundedCornerShape(50)),
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            val speed = trip.avgKmh?.let { " · Ø %.0f %s/h".format(locale, units.distance(it), units.distanceUnit) } ?: ""
+            Text(formatRideDuration(trip.movingMs) + speed, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** Battery health as a small table - only the days on which health or cycles actually changed. */
+@Composable
+private fun BatteryHealthCard(state: UiState, s: AppStrings, locale: java.util.Locale) {
+    if (state.batteryLog.isEmpty()) return
+    val units = LocalUnits.current
+    val log = state.batteryLog
+    // Older versions wrote one identical row per day - show only where a value changed.
+    val changes = log.filterIndexed { i, e -> i == 0 || e.soh != log[i - 1].soh || e.cycles != log[i - 1].cycles }
+    val dateFormat = java.text.SimpleDateFormat("dd.MM.yyyy", java.util.Locale.getDefault())
+    val header = MaterialTheme.typography.labelMedium
+    val body = MaterialTheme.typography.bodyMedium
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(s.batteryLogTitle, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+            Row(modifier = Modifier.fillMaxWidth()) {
+                LogCell(s.batteryLogDate, 1.25f, false, header, muted)
+                LogCell(s.batteryLogHealth, 1.1f, true, header, muted)
+                LogCell(s.batteryLogCycles, 0.9f, true, header, muted)
+                LogCell(s.batteryLogOdometer, 1.4f, true, header, muted)
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+            changes.takeLast(8).reversed().forEach { e ->
+                val millis = java.time.LocalDate.ofEpochDay(e.epochDay).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    LogCell(dateFormat.format(java.util.Date(millis)), 1.25f, false, body)
+                    LogCell(e.soh?.let { "$it %" } ?: "–", 1.1f, true, body)
+                    LogCell(e.cycles?.toString() ?: "–", 0.9f, true, body)
+                    LogCell("%.0f %s".format(locale, units.distance(e.km), units.distanceUnit), 1.4f, true, body)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RowScope.LogCell(text: String, weight: Float, end: Boolean, style: androidx.compose.ui.text.TextStyle, color: Color = Color.Unspecified) {
+    Text(text, modifier = Modifier.weight(weight), style = style, color = color, textAlign = if (end) TextAlign.End else TextAlign.Start, maxLines = 1, overflow = TextOverflow.Ellipsis)
 }
 
 @Composable

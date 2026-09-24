@@ -4,7 +4,7 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** One point of the battery health log: at most one per day and scooter. */
+/** One point of the battery health log: at most one per day and scooter, and only when health or cycles changed. */
 data class BatteryLogEntry(val epochDay: Long, val soh: Long?, val cycles: Long?, val km: Double)
 
 private const val PREFS_NAME = "scooter_prefs"
@@ -28,12 +28,15 @@ class BatteryHistoryStore(context: Context) {
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     /** Adds one recorded ride segment to the window, then drops whatever has aged out of it. */
-    fun addSegment(mac: String, mode: Long, km: Double, percentUsed: Double) {
-        val entries = loadWindow(mac) + RideSegment(mode, km, percentUsed)
+    fun addSegment(mac: String, mode: Long, km: Double, percentUsed: Double, startMs: Long = 0, endMs: Long = 0) {
+        val entries = loadWindow(mac) + RideSegment(mode, km, percentUsed, startMs, endMs)
         saveWindow(mac, RideWindow.trim(entries))
     }
 
     fun windowStats(mac: String): Map<Long, RideWindow.Stats> = RideWindow.statsByMode(loadWindow(mac))
+
+    /** The ride list, derived from the same window (see [RideLog]) - not stored separately. */
+    fun rideLog(mac: String): RideLog.Result = RideLog.build(loadWindow(mac))
 
     /** Wipes one device's ride window and battery log - offered behind a confirmation dialog in
      * the UI ("Verlauf zurücksetzen"), since this is a one-way action with no undo. The right tool
@@ -46,11 +49,15 @@ class BatteryHistoryStore(context: Context) {
             .apply()
     }
 
-    /** Notes today's battery health (SOH, charge cycles) and odometer - one entry per day, the
-     * latest reading of the day wins; the oldest entries drop out after [MAX_LOG_ENTRIES] days. */
+    /** Notes the battery health (SOH, charge cycles) and odometer - only when health or cycles differ
+     * from the last entry, so days without any change add nothing; the latest reading of a day wins;
+     * the oldest entries drop out after [MAX_LOG_ENTRIES]. */
     fun recordDaily(mac: String, soh: Long?, cycles: Long?, km: Double, epochDay: Long = java.time.LocalDate.now().toEpochDay()) {
         if (soh == null && cycles == null) return
-        val entries = dailyLog(mac).filter { it.epochDay != epochDay } + BatteryLogEntry(epochDay, soh, cycles, km)
+        val before = dailyLog(mac).filter { it.epochDay != epochDay }
+        val last = before.lastOrNull()
+        if (last != null && last.soh == soh && last.cycles == cycles) return
+        val entries = before + BatteryLogEntry(epochDay, soh, cycles, km)
         saveLog(mac, entries.sortedBy { it.epochDay }.takeLast(MAX_LOG_ENTRIES))
     }
 
@@ -102,14 +109,18 @@ class BatteryHistoryStore(context: Context) {
             val a = JSONArray(raw)
             (0 until a.length()).map { i ->
                 val o = a.getJSONObject(i)
-                RideSegment(o.getLong("mode"), o.getDouble("km"), o.getDouble("pct"))
+                RideSegment(o.getLong("mode"), o.getDouble("km"), o.getDouble("pct"), o.optLong("t0", 0), o.optLong("t1", 0))
             }
         }.getOrDefault(emptyList())
     }
 
     private fun saveWindow(mac: String, entries: List<RideSegment>) {
         val a = JSONArray()
-        for (e in entries) a.put(JSONObject().put("mode", e.mode).put("km", e.km).put("pct", e.percentUsed))
+        for (e in entries) {
+            val o = JSONObject().put("mode", e.mode).put("km", e.km).put("pct", e.percentUsed)
+            if (e.startMs > 0) o.put("t0", e.startMs).put("t1", e.endMs)
+            a.put(o)
+        }
         prefs.edit().putString(KEY_WINDOW_PREFIX + mac, a.toString()).apply()
     }
 }

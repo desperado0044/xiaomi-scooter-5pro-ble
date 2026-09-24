@@ -12,10 +12,10 @@ package com.scooterre.client.protocol
  * Without a connection during the ride there is no live log - such rides are not recorded at all.
  */
 class LiveRideTracker {
-    data class Reading(val km: Double, val batteryPercent: Long)
+    data class Reading(val km: Double, val batteryPercent: Long, val timeMs: Long = 0)
 
     /** A finished piece of a ride in one riding [mode]. */
-    data class Segment(val mode: Long, val km: Double, val percentUsed: Double)
+    data class Segment(val mode: Long, val km: Double, val percentUsed: Double, val startMs: Long = 0, val endMs: Long = 0)
 
     private var last: Reading? = null
     private var start: Reading? = null
@@ -63,7 +63,7 @@ class LiveRideTracker {
         val ridingMode = mode ?: return null
         val km = end.km - begin.km
         val percentUsed = (begin.batteryPercent - end.batteryPercent).toDouble()
-        return if (km >= MIN_SEGMENT_KM && RangeEstimate.isPlausibleRide(km, percentUsed)) Segment(ridingMode, km, percentUsed) else null
+        return if (km >= MIN_SEGMENT_KM && RangeEstimate.isPlausibleRide(km, percentUsed)) Segment(ridingMode, km, percentUsed, begin.timeMs, end.timeMs) else null
     }
 
     companion object {

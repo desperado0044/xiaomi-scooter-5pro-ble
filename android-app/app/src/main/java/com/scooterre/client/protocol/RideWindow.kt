@@ -1,8 +1,10 @@
 package com.scooterre.client.protocol
 
 /** One recorded stretch of riding in one mode: how far, and how many percentage points of a full
- * charge it used. */
-data class RideSegment(val mode: Long, val km: Double, val percentUsed: Double)
+ * charge it used. [startMs]/[endMs] (epoch millis) say when; 0 = not known (segments recorded by
+ * older versions), which the range estimate does not care about - only the ride list ([RideLog])
+ * does. */
+data class RideSegment(val mode: Long, val km: Double, val percentUsed: Double, val startMs: Long = 0, val endMs: Long = 0)
 
 /**
  * A rolling window of the most recent [WINDOW_KM] kilometres of riding (across all modes), used to

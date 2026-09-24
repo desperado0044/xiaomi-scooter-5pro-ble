@@ -111,10 +111,15 @@ no promise of support or of a schedule — this is a hobby project.
 - **Side menu** with the sections Ride, Battery, Settings, Vehicle, Identification, Ride log,
   History and App settings. All known MIoT properties with correct unit/scaling display and plain
   text instead of raw values; most settings are settable, with a safety/legal note for regionally
-  sensitive functions (cruise control, tail light).
+  sensitive functions (cruise control, tail light). Swipe left/right to move between the scooter's
+  sections (not in App settings).
 - **Live values**: automatic refresh; about every 2.5 s while riding (the ride-relevant values),
   adjustable while parked (economy/normal/fast).
-- **Ride log** (the scooter's most recent rides) can be exported as a file.
+- **Ride log**: the scooter itself only remembers its last 5 ride-log slots and overwrites the oldest. Each
+  time the app reads it, new rides are copied into a ride book on the phone (a short "n new rides imported"
+  note shows for 5 seconds), grouped by day with distance, ride time and average speed. Rides that were
+  already in the scooter when the ride book started have no date. Exportable as a text file. A ride that has
+  already dropped out of the scooter's slots before the app reads it again is lost.
 - **Tire maintenance**: reminder on/off and interval (14–180 days) settable.
 - **Home-screen widget** with the last known status (battery, lock, range).
 
@@ -193,8 +198,10 @@ no promise of support or of a schedule — this is a hobby project.
   comparison. **Rides without a connection are not recorded**; if you do not connect during rides, you only ever see
   the scooter's own (firmware) estimate. The switch in the app settings ("Own consumption analysis", on by default)
   decides which of the two is the prominent one: on picks your own once there is enough data, off always shows the
-  scooter's estimate and records nothing. The Verlauf (history) tab lists it per mode and also keeps a daily battery
-  health log (health, cycles, odometer); a "Reset history" button there clears all recorded distance/consumption for
+  scooter's estimate and records nothing. The Verlauf (history) tab lists it per mode, shows the recent rides as
+  a chart plus one card per ride (time, mode, distance, consumption, ride time, average speed; only for rides
+  recorded from v3.5 on, older ones are summed up in one line) and keeps a battery health log (health, cycles,
+  odometer) that only gets a new row when health or cycles change; a "Reset history" button there clears all recorded distance/consumption for
   a fresh start after something like a battery replacement — the 300 km window already handles gradual wear on its
   own, this is only for a sudden, one-off change.
 - **Copy diagnostics**: one button in the app settings copies app, phone and scooter model, settings and the latest
