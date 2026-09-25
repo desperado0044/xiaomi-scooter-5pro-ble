@@ -120,8 +120,18 @@ ist ein Hobbyprojekt.
   Einheiten-/Skalierungsanzeige und Klartext statt Rohwerten; die meisten Einstellungen sind
   setzbar, mit Sicherheits-/Rechtshinweis bei regional heiklen Funktionen (Tempomat, Rücklicht). Durch Wischen nach links/rechts wechselst du zwischen den
   Bereichen des Scooters (nicht in den App-Einstellungen).
-- **Live-Werte**: automatische Aktualisierung; während der Fahrt etwa alle 2,5 s (die
-  fahrrelevanten Werte), im Stand einstellbar (sparsam/normal/schnell).
+- **Live-Werte**: Jeder Wert wird in seinem eigenen Takt gelesen statt in einem langen Durchlauf über alles.
+  Fahrstatus, Akkustand und Fahrmodus alle 2,5 s; Kilometerstand und Fahrwerte in der Fahrt alle 2,5 s und im Stand
+  alle 10 s (auf Übersicht und Fahrt-Tab); Sperre, Laden, Fehler und Temperaturen alle 20 s; Einstellungen und
+  Akku-Gesundheit einmal pro Minute; Seriennummern und Daten einmal pro Verbindung. Beim Öffnen eines Tabs werden
+  dessen Werte sofort gelesen, und ein in der App geänderter Wert wird sofort zurückgelesen. Die Einstellung
+  „Aktualisierung im Stand" (schnell/normal/sparsam) streckt nur die Werte, die im Stand wenig wichtig sind. Ein
+  Scooter, der 15 s lang nicht antwortet, gilt als getrennt, damit keine alten Werte stehen bleiben.
+- **Standby**: Meldet der Scooter seinen Ruhezustand (steht auf dem Fahrzeug-Tab), sind seine Werte eingefroren (er
+  meldet z. B. „lädt" weiter, obwohl der Stecker gezogen ist). Die App zeigt dann statt jedes Werts „Standby", nur
+  „Scooter suchen" bleibt bedienbar, und nach dem Aufwachen werden alle Werte (auch die einmaligen) neu gelesen.
+  Beim Aufwecken setzt der Scooter sein Bluetooth zurück: die Verbindung reißt ab, und die App verbindet sich einmal
+  selbst neu (bis zu 5 Verbindungsversuche à 3 s).
 - **Fahrtenbuch**: Der Scooter merkt sich selbst nur die letzten 5 Fahrtenbuch-Plätze und überschreibt die
   ältesten. Bei jedem Auslesen kopiert die App neue Fahrten in ein Fahrtenbuch auf dem Handy (ein kurzer Hinweis
   „n neue Fahrten importiert" erscheint 5 Sekunden), nach Tagen gruppiert mit Strecke, Fahrzeit und
@@ -196,8 +206,10 @@ ist ein Hobbyprojekt.
 - **Update-Knopf**: Gibt es eine neuere Version, bietet der Hinweis „Update laden" an: Die App lädt die APK von der
   GitHub-Release-Seite dieses Projekts, prüft Prüfsumme und Signatur und öffnet den Installer des Systems, in dem du
   bestätigst. Es wird nie etwas still installiert. (Google Play Protect bietet bei einer neuen Version einmal einen Scan an.)
-- **Scooter suchen**: lässt den Scooter piepen und blinken. Verbinden und das funktionieren beide auch bei
-  ausgeschaltetem Scooter, solange er in Bluetooth-Reichweite ist.
+- **Scooter suchen**: lässt den Scooter piepen und blinken. Verbinden und das funktionieren, solange der Scooter sein
+  Bluetooth-Signal noch sendet, was der 5 Pro nach dem Ausschalten tut. Ein 5 Max, der entsperrt im Stand steht, ist
+  gar nicht erreichbar (Handbuch von Xiaomi: ein entsperrter Scooter im Standby schaltet sich nach etwa 10 Minuten
+  selbst aus); gesperrt bleibt er erreichbar.
 - **Reichweite nach eigenem Verbrauch (Live-Fahrtenlog)**: Solange dein Handy während der Fahrt mit dem Scooter
   verbunden ist und die App offen bleibt („Bildschirm anlassen" hilft), zeichnet die App Strecke und verbrauchte
   Akku-Prozent je Fahrmodus auf — ohne Rückfragen und ohne die Nennkapazität oder die Spannung des Akkus zu

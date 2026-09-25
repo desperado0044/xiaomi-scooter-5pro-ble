@@ -118,34 +118,46 @@ class ScooterBleManager(private val context: Context) {
         }
     }
 
+    /**
+     * Connects with up to [CONNECT_ATTEMPTS] tries of [CONNECT_ATTEMPT_MS] each, instead of one long wait. A real
+     * connection completes in 0.5-2.2 s (measured 2026-09-25, 8 connects), while a scooter that has just reset its
+     * Bluetooth (right after waking up) does not answer for a few seconds - one 8 s wait then only ran into the
+     * timeout, whereas knocking again after 3 s hits the moment it is ready. A just-killed previous process can also
+     * leave the OS stack so that the callback never fires; a bound is needed for that in any case.
+     */
     @SuppressLint("MissingPermission")
     suspend fun connect(device: BluetoothDevice): Boolean {
-        android.util.Log.d(TAG, "connect() calling connectGatt for ${device.address}")
-        connectDeferred = CompletableDeferred()
-        gatt = try {
-            device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
-        } catch (e: Exception) {
-            android.util.Log.e(TAG, "connectGatt threw", e)
-            throw e
+        for (attempt in 1..CONNECT_ATTEMPTS) {
+            android.util.Log.d(TAG, "connect() calling connectGatt for ${device.address} (attempt $attempt/$CONNECT_ATTEMPTS)")
+            connectDeferred = CompletableDeferred()
+            val g = try {
+                device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "connectGatt threw", e)
+                throw e
+            }
+            gatt = g
+            val result = withTimeoutOrNull(CONNECT_ATTEMPT_MS) { connectDeferred!!.await() } ?: false
+            android.util.Log.d(TAG, "connect() result=$result")
+            if (result) {
+                val prioritySet = gatt?.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH) ?: false
+                android.util.Log.d(TAG, "requestConnectionPriority(HIGH) -> $prioritySet")
+                return true
+            }
+            // Let go of this attempt completely (gatt = null first: a disconnect callback during our own cleanup is
+            // not a lost connection) so a late answer cannot mix with the next try.
+            gatt = null
+            try { g.disconnect() } catch (e: Exception) { /* already gone */ }
+            try { g.close() } catch (e: Exception) { /* already gone */ }
+            if (attempt < CONNECT_ATTEMPTS) delay(300L)
         }
-        android.util.Log.d(TAG, "connectGatt returned $gatt, awaiting connection result ...")
-        // A just-killed previous process can leave the OS Bluetooth stack in a state where this
-        // callback never fires at all for the first attempt right after - without a bound here
-        // that hangs the coroutine forever instead of failing fast enough for a caller to retry.
-        // 8s, not longer: a real connection consistently completes within ~5s live against the
-        // actual scooter - 10s just made every failed/retried attempt (3 of them, back to back)
-        // take needlessly long before the user saw any feedback at all.
-        val result = withTimeoutOrNull(8_000L) { connectDeferred!!.await() } ?: false
-        android.util.Log.d(TAG, "connect() result=$result")
-        if (result) {
-            val prioritySet = gatt?.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH) ?: false
-            android.util.Log.d(TAG, "requestConnectionPriority(HIGH) -> $prioritySet")
-        }
-        return result
+        return false
     }
 
     private companion object {
         const val TAG = "ScooterBle"
+        const val CONNECT_ATTEMPTS = 5
+        const val CONNECT_ATTEMPT_MS = 3_000L
 
         // A single immediate write failure is ambiguous (see connectionLost's doc comment) - this
         // many IN A ROW, each having already had its own quick retry, is not: every property in a

@@ -8,6 +8,9 @@ enum class UnitSystem { METRIC, IMPERIAL }
 
 val LocalUnits = compositionLocalOf { UnitSystem.METRIC }
 
+/** The scooter is in its sleep state - values are not shown (see [UiState.standby]). */
+val LocalStandby = compositionLocalOf { false }
+
 private const val KM_PER_MILE = 1.609344
 
 fun UnitSystem.distance(km: Double): Double = if (this == UnitSystem.IMPERIAL) km / KM_PER_MILE else km

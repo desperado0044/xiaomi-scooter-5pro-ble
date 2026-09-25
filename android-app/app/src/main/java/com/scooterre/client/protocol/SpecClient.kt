@@ -384,7 +384,7 @@ class SpecClient(private val ble: ScooterBleManager, private val keys: MiCrypto.
         return t
     }
 
-    suspend fun get(property: SpecProperty, timeoutMs: Long = 8000L): SpecReadResult {
+    suspend fun get(property: SpecProperty, timeoutMs: Long = 3000L): SpecReadResult {
         val frame = buildGetFrame(property.siid, property.piid, nextTid())
         val plaintext = requestWithRetry(frame, timeoutMs) ?: return SpecReadResult(property, ByteArray(0), -1)
         return parseSingleReply(property, plaintext)

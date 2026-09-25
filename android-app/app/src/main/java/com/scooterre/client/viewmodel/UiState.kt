@@ -66,7 +66,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
-enum class RefreshRate(val idleDelayMs: Long) { ECONOMY(30_000L), NORMAL(10_000L), FAST(3_000L) }
+/** [stillScale] stretches the read intervals of the values that only matter while parked (see [com.scooterre.client.protocol.PollPlan]). */
+enum class RefreshRate(val stillScale: Double) { ECONOMY(4.0), NORMAL(2.0), FAST(1.0) }
 
 enum class Screen { LOGIN, DASHBOARD, DEVICE_PICKER, APP_SETTINGS, DOCUMENTS, DOCUMENT_VIEWER }
 
@@ -159,4 +160,8 @@ data class UiState(
     val layoutMismatch: Boolean = false,
     // The text of a read-only property sweep (see PropertyExplorer), shown in a dialog to copy.
     val explorerReport: String? = null,
-)
+) {
+    /** The scooter reports its "Ruhezustand" (sleep state, looks switched off): its battery and ride values are then
+     * the last ones from before, not live - the dashboard shows "Standby" instead of them until it wakes up. */
+    val standby: Boolean get() = (values["FAKE_SHUTDOWN_STATUS"]?.takeIf { it.ok }?.value as? Long) == 1L
+}

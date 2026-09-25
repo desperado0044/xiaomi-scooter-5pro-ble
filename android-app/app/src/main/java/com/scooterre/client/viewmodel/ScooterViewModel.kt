@@ -26,6 +26,8 @@ import com.scooterre.client.protocol.MiProtocol
 import com.scooterre.client.protocol.ModelSupport
 import com.scooterre.client.protocol.RideWindow
 import com.scooterre.client.protocol.LiveRideTracker
+import com.scooterre.client.protocol.PollPlan
+import com.scooterre.client.protocol.PollTab
 import com.scooterre.client.protocol.RideBook
 import com.scooterre.client.protocol.RideBookStore
 import com.scooterre.client.protocol.PropertyExplorer
@@ -88,17 +90,10 @@ const val DEFAULT_SCOOTER_MAC = ""
  * short enough that a picker tile doesn't sit "Verbinde ..." forever if it's genuinely out of reach. */
 private const val CONNECT_BUDGET_MS = 25_000L
 
-/** Polled every ~2.5s (see [ScooterViewModel.startAutoRefresh]) while actually riding, instead of
- * the full ~50-property table - small enough that one pass stays well inside that window even
- * without batching, and covers exactly what changes meaningfully second-to-second on a moving
- * scooter (plus IS_RIDING itself, so the loop notices when the ride ends and drops back to the
- * slower full-sweep cadence). */
-private val RIDE_PRIORITY_PROPERTIES = setOf(
-    "IS_RIDING", "AVERAGE_SPEED", "CURRENT_MILEAGE", "BATTERY_LEVEL", "REMAINING_MILEAGE", "RIDING_TIME", "RIDING_MODE",
-    // for the live ride log (see LiveRideTracker): the odometer - BATTERY_LEVEL above doubles as
-    // the ride's cost, no separate mAh/voltage reads needed for it (see RideWindow's doc comment)
-    "TOTAL_MILEAGE",
-)
+/** How long the scooter may stay without a single successful answer before the connection counts as dead.
+ * Ride state, charge and mode are read every [PollPlan.FAST_MS] whatever the refresh rate is (see [PollPlan]). */
+private const val NO_DATA_MS = 15_000L
+
 
 /** Pause between full property sweeps while parked (a sweep itself takes ~9s on top). */
 
@@ -597,6 +592,22 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
                     connectionDied(mac, s.connectionLostError)
                 }
             }
+            // The third way a connection can die: the link looks fine (nothing reports a disconnect, writes go
+            // out) but the scooter no longer answers. Every read then just times out, and the screen would keep
+            // saying "connected" over values that nobody is refreshing. Nobody can rely on values shown under
+            // those conditions, so: no successful read for [NO_DATA_MS] = connection lost.
+            lastDataMs = System.currentTimeMillis()
+            connectionScope?.launch {
+                while (protocol === p) {
+                    delay(5_000L)
+                    val quietMs = System.currentTimeMillis() - lastDataMs
+                    if (protocol === p && quietMs > NO_DATA_MS) {
+                        Diagnostics.note("no answer from the scooter for ${quietMs / 1000}s - treating the connection as lost")
+                        connectionDied(mac, s.noDataError)
+                        break
+                    }
+                }
+            }
             if (support == ModelSupport.UNSUPPORTED) {
                 // Not this app's table: read only what the scooter offers, write nothing, then let go.
                 try {
@@ -616,6 +627,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
                     knownDevices = deviceRegistry.list(),
                 )
             }
+            initialReadDone = false
             refreshAll()
             startAutoRefresh()
             return
@@ -628,56 +640,169 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
 
     private var autoRefreshJob: Job? = null
 
-    /** Keeps every displayed value live without the user having to tap "Aktualisieren" - runs
-     * quietly in the background (no busy spinner, no error banner on a transient failure) so it
-     * doesn't fight the manual refresh/set actions for the UI's attention. Individual requests
-     * are still safe to interleave with manual actions: SpecClient's own mutex (see its comment)
-     * serializes all of them regardless of which caller issued them.
+    // The read schedule (see [PollPlan]): when each value is due next. A name missing from the map is due now; for
+    // a "once per connection" value a present entry means "read it again once" (tab opened), and it is removed after.
+    private val nextDueMs = HashMap<String, Long>()
+    private val failStreak = HashMap<String, Int>()
+    private var visibleTab = PollTab.OVERVIEW
+    private var lastWidgetMs = 0L
+    @Volatile private var initialReadDone = false
+    @Volatile private var initialReadStartedMs = 0L
+
+    /** The dashboard tells which tab is showing: its values are read at once, then kept fresh (see [PollPlan]). */
+    fun onSectionShown(tab: PollTab) {
+        visibleTab = tab
+        val profile = _state.value.activeSpecProfile
+        val names = when (tab) {
+            PollTab.OVERVIEW -> PollPlan.OVERVIEW_NAMES
+            PollTab.RIDE -> profile.tabRide
+            PollTab.BATTERY -> profile.tabBattery
+            PollTab.SETTINGS -> profile.tabSettings
+            PollTab.VEHICLE -> profile.tabVehicleStatus
+            PollTab.IDENTIFICATION -> profile.tabIdentification
+            PollTab.RIDE_LOG -> profile.tabRideLog
+            PollTab.OTHER -> emptyList()
+        }
+        val now = System.currentTimeMillis()
+        names.forEach { nextDueMs[it] = now }
+    }
+
+    private fun isRiding(): Boolean = ((_state.value.values["IS_RIDING"]?.takeIf { it.ok }?.value as? Long) ?: 0L) != 0L
+
+    private fun intervalFor(name: String): Long? =
+        PollPlan.intervalMs(name, isRiding(), visibleTab, _state.value.refreshRate.stillScale)
+
+    /** After the first full read (connect or the "Aktualisieren" button): everything is fresh, so the schedule starts over. */
+    private fun scheduleAfterFullRead() {
+        val now = System.currentTimeMillis()
+        nextDueMs.clear()
+        failStreak.clear()
+        initialReadDone = true
+        for (p in _state.value.activeSpecProfile.all) {
+            val interval = intervalFor(p.name) ?: continue
+            nextDueMs[p.name] = now + interval
+        }
+    }
+
+    private fun dueNow(vararg names: String) {
+        val now = System.currentTimeMillis()
+        names.forEach { nextDueMs[it] = now }
+    }
+
+    /**
+     * Keeps every displayed value live without the user having to tap "Aktualisieren" - runs quietly in the
+     * background (no busy spinner, no error banner on a transient failure). One read at a time, always the value
+     * that is most overdue for its own interval ([PollPlan]) - SpecClient's own mutex serializes these with manual
+     * actions. Batching several properties into one request is not an option: the scooter answers only the first
+     * object of a multi-object GET and returns error records for the rest (verified live, 2026-09-20).
      *
-     * Two cadences, not one - the previous single ~19s cycle (9s active pass over all ~50
-     * properties + 10s pause) was fine while parked but too sluggish while actually riding, where
-     * speed/distance/battery genuinely change second to second. While [RIDE_PRIORITY_PROPERTIES]'s
-     * own IS_RIDING reads true, only that small, ride-relevant subset is polled, every ~2.5s -
-     * matching the motor controller's own internal telemetry push cadence (2560 MCU ticks ≈ 2.5s,
-     * see reference/SCOOTER_5_PRO/research/REPORT.md §33-34's `61 30 0A` push-frame analysis)
-     * rather than an arbitrary faster number: the underlying values don't update at the source any
-     * faster than that, so polling quicker would just re-read the same stale number sooner.
-     * Once stopped/parked, it falls back to the full ~19s sweep as before. Batching several
-     * properties into one request is not an option: the scooter answers only the first object of
-     * a multi-object GET and returns error records for the rest (verified live, 2026-09-20). */
+     * IS_RIDING is 0=Steht/Standing, 1=Übergang/Transitioning, 2=Fährt/Riding - "not standing" (not just the single
+     * value 2) so the fast cadence and live tracking both start the moment the scooter leaves "Steht" (a real bug
+     * until 2026-09-22: both compared against exactly 1, so an entire real ride - state 2 throughout - read as
+     * "parked" and recorded nothing). The fast cadence is 2.5 s, matching the motor controller's own telemetry push
+     * (2560 MCU ticks, see reference/SCOOTER_5_PRO/research/REPORT.md §33-34): polling quicker would just re-read
+     * the same number sooner.
+     */
     private fun startAutoRefresh() {
         autoRefreshJob?.cancel()
         autoRefreshJob = viewModelScope.launch {
+            initialReadStartedMs = System.currentTimeMillis()
             while (true) {
-                // IS_RIDING is 0=Steht/Standing, 1=Übergang/Transitioning, 2=Fährt/Riding - "not
-                // standing" (not just the single value 2) so the fast cadence, and live tracking
-                // below, both start the moment the scooter leaves "Steht" instead of only for
-                // the brief transitional tick before it (a real bug until 2026-09-22: both this
-                // check and trackLiveRide's compared against exactly 1, so an entire real ride -
-                // state 2 throughout - read as "parked" and recorded nothing).
-                val riding = ((_state.value.values["IS_RIDING"]?.takeIf { it.ok }?.value as? Long) ?: 0L) != 0L
-                delay(if (riding) 2_500L else _state.value.refreshRate.idleDelayMs)
+                // A full read (connect, or the scooter waking up) sets the schedule - wait for it, but never for good.
+                if (!initialReadDone && System.currentTimeMillis() - initialReadStartedMs < 30_000L) {
+                    delay(200L)
+                    continue
+                }
                 val spec = protocol?.requireSpecClient() ?: break
-                try {
-                    // Collected locally and applied in one state update at the end, instead of
-                    // one update per property - a background refresh should swap all values over
-                    // at once, not visibly re-build the screen property by property the way the
-                    // very first load after connecting does.
-                    val results = mutableMapOf<String, SpecReadResult>()
-                    val allProperties = _state.value.activeSpecProfile.all
-                    val toRead = if (riding) allProperties.filter { it.name in RIDE_PRIORITY_PROPERTIES } else allProperties
-                    for (property in toRead) {
-                        results[property.name] = withContext(Dispatchers.IO) { spec.get(property) }
+                val profile = _state.value.activeSpecProfile
+                val now = System.currentTimeMillis()
+                var next: SpecProperty? = null
+                var mostLate = -1.0
+                val sleeping = _state.value.standby
+                for (p in profile.all) {
+                    if (p.name in profile.writeOnly) continue
+                    // While the scooter sleeps its values are frozen: only ask whether it is awake again.
+                    if (sleeping && p.name != "FAKE_SHUTDOWN_STATUS") continue
+                    val interval = intervalFor(p.name)
+                    val due = nextDueMs[p.name] ?: if (interval == null) continue else now
+                    if (due > now) continue
+                    val late = (now - due).toDouble() / (interval ?: PollPlan.MEDIUM_MS)
+                    if (late > mostLate) {
+                        mostLate = late
+                        next = p
                     }
-                    _state.update { it.copy(values = it.values + results) }
-                    trackLiveRide()
-                    if (!riding) importRideBook()
-                    pushWidgetUpdate()
+                }
+                if (next == null) {
+                    delay(100L)
+                    continue
+                }
+                try {
+                    if (PollPlan.isLogSlot(next.name)) readRideLogSlots(spec, profile) else readScheduled(spec, next)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
-                    android.util.Log.w("ScooterVM", "auto-refresh tick failed", e)
+                    android.util.Log.w("ScooterVM", "scheduled read failed", e)
+                    nextDueMs[next.name] = System.currentTimeMillis() + PollPlan.RETRY_MS
                 }
             }
         }
+    }
+
+    /** Reads one value, stores it and sets when it is due next; a first failure keeps the old value and retries soon. */
+    private suspend fun readScheduled(spec: SpecClient, property: SpecProperty) {
+        val name = property.name
+        val before = _state.value.values[name]?.takeIf { it.ok }?.value
+        val result = noteData(withContext(Dispatchers.IO) { spec.get(property) })
+        val now = System.currentTimeMillis()
+        if (!result.ok && before != null && (failStreak[name] ?: 0) < 1) {
+            // One lost answer must not blank a value that is only re-read once a minute - try again shortly.
+            failStreak[name] = 1
+            nextDueMs[name] = now + PollPlan.RETRY_MS
+            return
+        }
+        if (result.ok) failStreak.remove(name) else failStreak[name] = 2
+        _state.update { it.copy(values = it.values + (name to result)) }
+        val interval = intervalFor(name)
+        if (interval == null) nextDueMs.remove(name) else nextDueMs[name] = now + if (result.ok) interval else PollPlan.RETRY_MS * 2
+        if (!result.ok) return
+        val after = result.value
+        when (name) {
+            "FAKE_SHUTDOWN_STATUS" -> if (((before as? Long) ?: 0L) == 1L && ((after as? Long) ?: 0L) != 1L) {
+                // The scooter woke up: everything is read again, the once-per-connection values too.
+                initialReadStartedMs = System.currentTimeMillis()
+                initialReadDone = false
+                refreshAll()
+            }
+            "IS_RIDING" -> {
+                val wasRiding = ((before as? Long) ?: 0L) != 0L
+                val isRiding = ((after as? Long) ?: 0L) != 0L
+                if (before != null && wasRiding != isRiding) {
+                    // A ride starts or ends: odometer and trip values right away (a ride's end also closes its
+                    // segment), and the scooter has logged the ride by now.
+                    dueNow("TOTAL_MILEAGE", "REMAINING_MILEAGE", "REMAINING_MILEAGE_ALGORITHM", "CURRENT_MILEAGE", "RIDING_TIME", "AVERAGE_SPEED", "HIGHEST_SPEED")
+                    if (!isRiding) dueNow("LOG_1")
+                }
+            }
+            "RIDING_MODE", "BATTERY_LEVEL" -> if (before != null && before != after) dueNow("REMAINING_MILEAGE", "REMAINING_MILEAGE_ALGORITHM")
+            "TOTAL_MILEAGE" -> trackLiveRide()
+            "SOH" -> recordBatteryLog()
+        }
+        if (name == "BATTERY_LEVEL" && !_state.value.standby && now - lastWidgetMs > 30_000L) {
+            lastWidgetMs = now
+            pushWidgetUpdate()
+        }
+    }
+
+    /** The five ride-log slots are read together and only then compared with what the ride book has seen - a half
+     * refreshed set (a ride moves records between slots) would look like rides appearing twice. */
+    private suspend fun readRideLogSlots(spec: SpecClient, profile: SpecProfile) {
+        val now = System.currentTimeMillis()
+        for (p in profile.all.filter { PollPlan.isLogSlot(it.name) }) {
+            val result = noteData(withContext(Dispatchers.IO) { spec.get(p) })
+            if (result.ok) _state.update { it.copy(values = it.values + (p.name to result)) }
+            nextDueMs[p.name] = now + (intervalFor(p.name) ?: PollPlan.SLOW_MS)
+        }
+        importRideBook()
     }
 
     private fun stopAutoRefresh() {
@@ -693,7 +818,21 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     private fun connectionDied(mac: String, message: String) {
         disconnect()
         _state.update { it.copy(connectFailedMac = mac, connectFailedError = message) }
+        // The scooter resets its Bluetooth when it wakes up (link timeout, seen live 2026-09-25) - so one automatic
+        // reconnect, after a moment for it to start advertising again. Only once a minute: if that fails the red tile
+        // stays, exactly as before, instead of looping.
+        val device = deviceRegistry.list().firstOrNull { it.mac.equals(mac, ignoreCase = true) } ?: return
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastAutoReconnectMs < 60_000L) return
+        lastAutoReconnectMs = now
+        Diagnostics.note("connection lost - reconnecting once")
+        viewModelScope.launch {
+            delay(2_000L)
+            if (_state.value.screen == Screen.DEVICE_PICKER && _state.value.connectingMac == null) connectKnownDevice(device)
+        }
     }
+
+    private var lastAutoReconnectMs = -60_000L
 
     /** Cleanly closes the BLE connection and returns to the login screen - lets the user end the
      * session properly (or switch to a different scooter) instead of the only alternative being
@@ -735,19 +874,24 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
         // first of all) at the head of the sweep, so it is there right after connecting, not after the whole pass.
         _state.update { it.copy(modeStats = batteryHistoryStore.windowStats(it.macAddress), rideLog = batteryHistoryStore.rideLog(it.macAddress), batteryLog = batteryHistoryStore.dailyLog(it.macAddress), rideBook = rideBookStore.entries(it.macAddress)) }
         val firstNames = listOf(
-            "BATTERY_LEVEL", "RIDING_MODE", "REMAINING_MILEAGE", "IS_CHARGING", "ENERGY_RECOVERY",
+            "FAKE_SHUTDOWN_STATUS", "BATTERY_LEVEL", "RIDING_MODE", "REMAINING_MILEAGE", "IS_CHARGING", "ENERGY_RECOVERY",
             "IS_LOCKED", "CURRENT_MILEAGE", "RIDING_TIME", "AVERAGE_SPEED", "HIGHEST_SPEED",
         )
         for (property in profile.all.sortedBy { firstNames.indexOf(it.name).let { i -> if (i < 0) firstNames.size else i } }) {
             if (property.name in profile.writeOnly) continue
-            val result = withContext(Dispatchers.IO) { spec.get(property) }
+            val result = noteData(withContext(Dispatchers.IO) { spec.get(property) })
             _state.update { it.copy(values = it.values + (property.name to result)) }
+            // A sleeping scooter reports frozen values: nothing else is read (and none shown) until it wakes up.
+            if (property.name == "FAKE_SHUTDOWN_STATUS" && _state.value.standby) break
         }
-        checkLayout()
-        trackLiveRide()
-        importRideBook()
-        recordBatteryLog()
+        if (!_state.value.standby) {
+            checkLayout()
+            trackLiveRide()
+            importRideBook()
+            recordBatteryLog()
+        }
         _state.update { it.copy(modeStats = batteryHistoryStore.windowStats(it.macAddress), rideLog = batteryHistoryStore.rideLog(it.macAddress), batteryLog = batteryHistoryStore.dailyLog(it.macAddress)) }
+        scheduleAfterFullRead()
         pushWidgetUpdate()
     }
 
@@ -777,6 +921,13 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private val liveRide = LiveRideTracker()
+
+    /** When the scooter last answered a read successfully - see the watchdog in connectAndLogin. */
+    @Volatile private var lastDataMs = 0L
+    private fun noteData(result: SpecReadResult): SpecReadResult {
+        if (result.ok) lastDataMs = System.currentTimeMillis()
+        return result
+    }
 
     /** The live ride log (see [LiveRideTracker]): called with every fresh set of readings while connected. While the
      * scooter is ridden, distance and battery percentage are added to the window ([RideWindow]) of the riding mode
@@ -855,7 +1006,7 @@ class ScooterViewModel(application: Application) : AndroidViewModel(application)
 
     fun refreshOne(property: SpecProperty) = launchBusy(null, connectionScope ?: viewModelScope) {
         val spec = protocol?.requireSpecClient() ?: return@launchBusy
-        val result = withContext(Dispatchers.IO) { spec.get(property) }
+        val result = noteData(withContext(Dispatchers.IO) { spec.get(property) })
         _state.update { it.copy(values = it.values + (property.name to result)) }
     }
 

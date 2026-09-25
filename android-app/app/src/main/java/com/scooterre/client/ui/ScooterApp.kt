@@ -189,8 +189,9 @@ fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
                         onImportDevice = viewModel::importDevice,
                         onImportBundle = viewModel::importBundle,
                     )
-                    Screen.DASHBOARD -> DashboardScreen(
-                        state = state,
+                    Screen.DASHBOARD -> CompositionLocalProvider(LocalStandby provides state.standby) { DashboardScreen(
+                        // While the scooter sleeps its values are frozen: none of them is passed on (see UiState.standby).
+                        state = if (state.standby) state.copy(values = emptyMap()) else state,
                         onRefreshAll = viewModel::refreshAll,
                         onDisconnect = viewModel::disconnect,
                         onToggleLanguage = viewModel::toggleLanguage,
@@ -199,8 +200,9 @@ fun ScooterApp(viewModel: ScooterViewModel = viewModel()) {
                         onSetString = viewModel::setStringProperty,
                         onResetHistory = viewModel::resetEfficiencyHistory,
                         onDismissRideBookNote = viewModel::dismissRideBookNote,
+                        onSectionShown = viewModel::onSectionShown,
                         settings = settingsActions,
-                    )
+                    ) }
                     Screen.DEVICE_PICKER -> DevicePickerScreen(
                         state = state,
                         onSelectDevice = viewModel::connectKnownDevice,

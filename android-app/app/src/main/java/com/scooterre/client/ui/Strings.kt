@@ -262,6 +262,9 @@ data class AppStrings(
     val tileConnectingText: String,
     val tileConnectFailedText: String,
     val connectionLostError: String,
+    val noDataError: String,
+    val standbyLabel: String,
+    val standbyBanner: String,
 )
 
 val STRINGS_DE = AppStrings(
@@ -365,10 +368,10 @@ val STRINGS_DE = AppStrings(
     autoConnectLabel = "Automatisch verbinden",
     autoConnectHint = "Beim App-Start direkt mit dem zuletzt genutzten Scooter verbinden. Die Zurück-Geste führt zur Geräteliste.",
     refreshRateLabel = "Aktualisierung im Stand",
-    refreshRateHint = "Wie oft alle Werte neu gelesen werden, solange der Scooter steht. Beim Fahren sind es immer etwa 2,5 Sekunden.",
-    refreshEconomy = "Sparsam (ca. 40 s)",
-    refreshNormal = "Normal (ca. 20 s)",
-    refreshFast = "Schnell (ca. 12 s)",
+    refreshRateHint = "Wie oft Werte wie Sperre, Temperaturen und Einstellungen im Stand neu gelesen werden. Fahrstatus, Akkustand und Fahrmodus werden immer alle 2,5 Sekunden gelesen, beim Fahren auch die Fahrwerte.",
+    refreshEconomy = "Sparsam",
+    refreshNormal = "Normal",
+    refreshFast = "Schnell",
     unitsLabel = "Einheiten",
     unitsMetric = "Metrisch (km, km/h, °C)",
     unitsImperial = "Imperial (mi, mph, °F)",
@@ -520,6 +523,9 @@ val STRINGS_DE = AppStrings(
     tileConnectingText = "Verbinde ...",
     tileConnectFailedText = "Verbindung nicht möglich",
     connectionLostError = "Verbindung zum Scooter verloren",
+    noDataError = "Der Scooter antwortet nicht mehr - Verbindung beendet, damit keine alten Werte stehen bleiben",
+    standbyLabel = "Standby",
+    standbyBanner = "Der Scooter ist im Ruhezustand: seine Werte sind eingefroren und werden nicht angezeigt. Nach dem Aufwecken werden alle Werte neu gelesen. Nur die Suche funktioniert weiter.",
 )
 
 val STRINGS_EN = AppStrings(
@@ -623,10 +629,10 @@ val STRINGS_EN = AppStrings(
     autoConnectLabel = "Connect automatically",
     autoConnectHint = "On app start, connect straight to the last used scooter. The back gesture leads to the device list.",
     refreshRateLabel = "Refresh while parked",
-    refreshRateHint = "How often all values are re-read while the scooter is standing. While riding it is always about every 2.5 seconds.",
-    refreshEconomy = "Economy (~40 s)",
-    refreshNormal = "Normal (~20 s)",
-    refreshFast = "Fast (~12 s)",
+    refreshRateHint = "How often values like lock, temperatures and settings are re-read while parked. Ride state, charge and riding mode are always read every 2.5 seconds, the trip values too while riding.",
+    refreshEconomy = "Economy",
+    refreshNormal = "Normal",
+    refreshFast = "Fast",
     unitsLabel = "Units",
     unitsMetric = "Metric (km, km/h, °C)",
     unitsImperial = "Imperial (mi, mph, °F)",
@@ -778,6 +784,9 @@ val STRINGS_EN = AppStrings(
     tileConnectingText = "Connecting ...",
     tileConnectFailedText = "Could not connect",
     connectionLostError = "Lost connection to the scooter",
+    noDataError = "The scooter stopped answering - connection ended so that no old values stay on screen",
+    standbyLabel = "Standby",
+    standbyBanner = "The scooter is in its sleep state: its values are frozen and not shown. When it wakes up all values are read again. Only Find scooter still works.",
 )
 
 fun strings(lang: Lang): AppStrings = if (lang == Lang.DE) STRINGS_DE else STRINGS_EN

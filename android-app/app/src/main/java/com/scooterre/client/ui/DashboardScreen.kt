@@ -71,6 +71,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.scooterre.client.protocol.PollTab
 import com.scooterre.client.protocol.RangeEstimate
 import com.scooterre.client.protocol.RideBookEntry
 import com.scooterre.client.protocol.RideTrip
@@ -222,6 +223,7 @@ fun DashboardScreen(
     onSetString: (SpecProperty, String) -> Unit,
     onResetHistory: () -> Unit,
     onDismissRideBookNote: () -> Unit,
+    onSectionShown: (PollTab) -> Unit,
     settings: SettingsActions,
 ) {
     val s = strings(state.language)
@@ -241,6 +243,21 @@ fun DashboardScreen(
         }
     }
     var selectedSection by remember { mutableStateOf(DashboardSection.OVERVIEW) }
+    // Tells the read schedule which tab is showing, so its values are the ones kept fresh (see PollPlan).
+    LaunchedEffect(selectedSection) {
+        onSectionShown(
+            when (selectedSection) {
+                DashboardSection.OVERVIEW -> PollTab.OVERVIEW
+                DashboardSection.RIDE -> PollTab.RIDE
+                DashboardSection.BATTERY -> PollTab.BATTERY
+                DashboardSection.SETTINGS -> PollTab.SETTINGS
+                DashboardSection.VEHICLE -> PollTab.VEHICLE
+                DashboardSection.IDENTIFICATION -> PollTab.IDENTIFICATION
+                DashboardSection.RIDE_LOG -> PollTab.RIDE_LOG
+                DashboardSection.HISTORY, DashboardSection.APP_SETTINGS -> PollTab.OTHER
+            },
+        )
+    }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
@@ -337,6 +354,15 @@ fun DashboardScreen(
                     "${s.errorPrefix}$it",
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
+            }
+
+            if (LocalStandby.current && selectedSection != DashboardSection.APP_SETTINGS) {
+                Text(
+                    s.standbyBanner,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 4.dp),
                 )
             }
@@ -466,6 +492,18 @@ private fun OverviewContent(
             )
         }
         ridingMode?.let { mode -> ModeCard(state, s, profile, propertiesByName, lang, units, mode, onSetNumeric) }
+        if (ridingMode == null && LocalStandby.current) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+            ) {
+                Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+                    Text(propertyName("RIDING_MODE", lang), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(s.standbyLabel, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                }
+            }
+        }
     }
     // The bottom half: recuperation plus the glance tiles - the part that most benefits from
     // landscape's extra width (four tiles per row instead of two), so it moves to its own column
@@ -515,6 +553,13 @@ private fun RangeAndBatteryRow(state: UiState, s: AppStrings, lang: Lang, units:
     // scooter's own estimate named underneath for comparison, once there is enough data for it -
     // before that (or with the switch off), the scooter's estimate is the only one shown, exactly
     // as before this existed.
+    if (LocalStandby.current) {
+        Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            BigStatCard(Modifier.weight(1f).fillMaxHeight(), s.standbyLabel, "", propertyName("REMAINING_MILEAGE", lang), Color(0xFF8E8E93), compact = true)
+            BigStatCard(Modifier.weight(1f).fillMaxHeight(), s.standbyLabel, "", propertyName("BATTERY_LEVEL", lang), Color(0xFF8E8E93), compact = true)
+        }
+        return
+    }
     val ownKm = ridingMode?.let { habitRangeKm(state, it, units) }
     val ownLabel = ridingMode?.let { enumLabel("RIDING_MODE", it, lang) }
     val showOwn = state.rideTracking && ownKm != null && ownLabel != null
@@ -687,7 +732,7 @@ private fun OverviewTile(
                 )
                 if (!writeOnly) {
                     Text(
-                        displayValue(property, result, lang, s, LocalUnits.current),
+                        if (result == null && LocalStandby.current) s.standbyLabel else displayValue(property, result, lang, s, LocalUnits.current),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Medium,
                         color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
@@ -708,7 +753,7 @@ private fun OverviewTile(
 }
 
 @Composable
-private fun BigStatCard(modifier: Modifier = Modifier, value: String, unit: String, label: String, accent: Color, subtitle: String? = null) {
+private fun BigStatCard(modifier: Modifier = Modifier, value: String, unit: String, label: String, accent: Color, subtitle: String? = null, compact: Boolean = false) {
     Card(
         modifier = modifier,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
@@ -721,7 +766,7 @@ private fun BigStatCard(modifier: Modifier = Modifier, value: String, unit: Stri
                 // sized up once more (displayLarge, more card padding) once there was screen room
                 // to spare for it (confirmed on-device, 2026-09-22): these are the two or three
                 // numbers this whole screen exists to show at a glance while riding.
-                Text(value, style = MaterialTheme.typography.displayLarge, fontWeight = FontWeight.Bold, color = accent)
+                Text(value, style = if (compact) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.displayLarge, fontWeight = FontWeight.Bold, color = accent, modifier = if (compact) Modifier.padding(vertical = 14.dp) else Modifier)
                 Text(
                     " $unit",
                     style = MaterialTheme.typography.titleLarge,
@@ -1223,7 +1268,7 @@ private fun PropertyRow(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        displayValue(property, result, lang, s, LocalUnits.current),
+                        if (result == null && LocalStandby.current) s.standbyLabel else displayValue(property, result, lang, s, LocalUnits.current),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Medium,
                         color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,

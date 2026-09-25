@@ -113,8 +113,18 @@ no promise of support or of a schedule — this is a hobby project.
   text instead of raw values; most settings are settable, with a safety/legal note for regionally
   sensitive functions (cruise control, tail light). Swipe left/right to move between the scooter's
   sections (not in App settings).
-- **Live values**: automatic refresh; about every 2.5 s while riding (the ride-relevant values),
-  adjustable while parked (economy/normal/fast).
+- **Live values**: every value is read at its own pace instead of one long sweep over everything. Ride state, charge and
+  riding mode every 2.5 s; odometer and trip values every 2.5 s while riding and every 10 s parked (on the overview
+  and ride tab); lock, charging, faults and temperatures every 20 s; settings and battery health once a minute;
+  serial numbers and dates once per connection. Opening a tab reads its values at once, and a value you change in the
+  app is read back at once. The "refresh while parked" setting (fast/normal/economy) only stretches the values that
+  matter little while parked. A scooter that stops answering for 15 s counts as disconnected, so no old values stay
+  on screen.
+- **Standby**: when the scooter reports its sleep state ("Ruhezustand", shown on the Vehicle tab) its values are frozen
+  (e.g. it keeps saying "charging" after the plug is pulled). The app then shows "Standby" instead of every value, only
+  "Find scooter" stays usable, and after it wakes up all values (including the once-per-connection ones) are read again.
+  Waking the scooter makes it reset its Bluetooth: the connection drops and the app reconnects by itself once (up to
+  5 connection attempts of 3 s each).
 - **Ride log**: the scooter itself only remembers its last 5 ride-log slots and overwrites the oldest. Each
   time the app reads it, new rides are copied into a ride book on the phone (a short "n new rides imported"
   note shows for 5 seconds), grouped by day with distance, ride time and average speed. Rides that were
@@ -185,8 +195,10 @@ no promise of support or of a schedule — this is a hobby project.
 - **Update button**: when a newer release exists, the notice offers "Download update": the app downloads the APK from
   this project's GitHub release page, checks its checksum and signature and opens the system installer, where you
   confirm. Nothing is ever installed silently. (Google Play Protect may offer to scan a new version once.)
-- **Find scooter**: makes the scooter beep and flash. Connecting and this both work even with the scooter
-  switched off, as long as it's within Bluetooth range.
+- **Find scooter**: makes the scooter beep and flash. Connecting and this work while the scooter still sends its
+  Bluetooth signal, which the 5 Pro does after being switched off. A 5 Max that is unlocked and idle is not
+  reachable at all (Xiaomi's manual: an unlocked scooter in standby switches itself off after about 10 minutes);
+  locked it stays reachable.
 - **Range at your own consumption (live ride log)**: while your phone is connected to the scooter during a ride
   and the app stays open ("Keep screen on" helps), the app records distance and battery percentage used per riding
   mode — without any questions, and without needing the battery's rated capacity or its voltage (which sags under
